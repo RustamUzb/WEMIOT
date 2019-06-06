@@ -29,13 +29,19 @@ print(df.head())
 After initiating the `Fit` class, access to several properties like `beta, eta` and methods like `hazard_rate_at_time()` will be available:   
 # Properties
 
-*`beta`* - 
-*`eta`* - 
-*`average_live`* - 
-*`totalOperationTime`* - 
-*`mtbf`* -
-*`observetions_numbers`* - 
-*`failures_numbers`* - 
+**`beta`** - The Weibull's shape factor, _Beta_. Returns the Weibull's slop, which describes pdf. If β is significantly less than one, the pdf approximates to the hyper-exponential, i.e. is characteristic of 'running-in' failure; If β = 1 the pdf becomes the simple negative exponential, characteristic of 'purely random' failure; As β rises above a value of about 2, the pdf converges ever more closely to the Normal pdf, characteristic of 'wear-out' failure
+
+**`eta`** - The Weibull's characteristic life, _eta_. Return  interval between t0 and the time at which it can be expected that 37 per cent of the population will have survived (and hence 63 per cent will have failed).
+
+**`average_live`** - Expected population's MTTF. Returns calculated average population operation time (MTTF) based on sample's failure data.
+
+**`totalOperationTime`** - Total recorded operation time for all item in the sample.
+
+**`mtbf`** - Return mean time between failures at time of running this function, which calculated by: total operating time / number of failures
+
+**`observetions_numbers`** - Total number of items in the sample
+
+**`failures_numbers`** - Total number of failed items in the sample
 
 # Methods
 
