@@ -162,7 +162,7 @@ class Fit:
         b = self._eta*_log**(1.0/self._beta)
         return b
 
-    def cdf_at_time(self, time: float=0.0, plot: bool=False):
+    def unreliability_at_time(self, time: float=0.0, plot: bool=False):
         """
         The probability that an item will be in not operational state at a particular point in time.
         Probability of failure is also known as "unreliability" and it is the reciprocal of the reliability.
