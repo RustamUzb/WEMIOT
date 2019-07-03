@@ -1,5 +1,6 @@
 import logging, sys
 
+import analysis.lme as alme
 
 import scipy.stats as ss
 import scipy.special as ssp
@@ -54,12 +55,12 @@ class Fit:
 
         self._data = dat
 
-        if self._total_failures <30:
+        if self._total_failures < 30:
             self._linear_regression()
         else:
             self._lme()
 
-        #self._plot_weibull_cdf()
+        # self._plot_weibull_cdf()
 
     def _linear_regression(self):
 
@@ -93,24 +94,10 @@ class Fit:
         x_intercept = - intercept / self._beta
         self._eta = np.exp(-x_intercept / slope)
 
-
     def _lme(self):
-
-        wbf = WeibullFitter(1 - self._conf_bound).fit(self._data['times'], self._data['is_failure'], self._data['times'].array)
-        result = pd.concat([self._data, wbf.cumulative_density_at_times(self._data['times'].array)], axis=1)
-        self._data = pd.concat([result, wbf.confidence_interval_cumulative_density_], axis=1 )
-        self._data.columns = ['times', 'is_failure', 'cdf', 'h_bound', 'l_bound']
-        self._beta = wbf.rho_
-        self._eta = wbf.lambda_
-
-        x0 = np.log(self._data.dropna()['times'].values)
-        y = np.log(-np.log(1.0 - np.asarray(self._data.dropna()['cdf'])))
-
-        slope, intercept, r, p_value, std_err = ss.linregress(y, x0)
-        self._r_value = p_value
-
-        #logger.debug(wbf.print_summary())
-        #logger.log(wbf.print_summary())
+        fail = None
+        cens = None
+        self._beta, self._eta = alme.lme_weibull(fail, cens)
 
     def plot_weibull_cdf(self):
 
