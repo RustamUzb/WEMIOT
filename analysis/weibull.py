@@ -16,8 +16,8 @@ from lifelines import WeibullFitter
 
 np.seterr(divide='ignore', invalid='ignore')
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.WARN)
-#logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+#logging.basicConfig(level=logging.WARN)
+logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 
 logger = logging.getLogger('matplotlib')
 # set WARNING for Matplotlib
@@ -37,6 +37,7 @@ class Fit:
         sns.set(style="darkgrid")
         self._beta = None
         self._eta = None
+        self._method = None
         #sample population evaluation
         self._spe = None
         self._total_observations = None
@@ -55,9 +56,14 @@ class Fit:
 
         self._data = dat
 
-        if self._total_failures < 30:
+        if (self._total_failures < 15 and fit_type is None) or fit_type == 'MRR':
+            self._method = 'MRR'
             self._linear_regression()
+        elif (self._total_failures >= 15 and fit_type is None) or fit_type == 'MLE':
+            self._method = 'MLE'
+            self._lme()
         else:
+            self._method = 'MLE'
             self._lme()
 
         # self._plot_weibull_cdf()
@@ -91,12 +97,15 @@ class Fit:
 
         self._beta = 1.0 / slope
         self._r_value = r
-        x_intercept = - intercept / self._beta
-        self._eta = np.exp(-x_intercept / slope)
+        #x_intercept = - intercept / self._beta
+        self._eta = np.exp(intercept)
 
     def _lme(self):
-        fail = None
-        cens = None
+        df = self._data
+        fail = df.loc[df['is_failure'] == 1,['times']].to_numpy().squeeze()
+        cens = df.loc[df['is_failure'] == 0,['times']].to_numpy().squeeze()
+        logging.debug(fail)
+        logging.debug(cens)
         self._beta, self._eta = alme.lme_weibull(fail, cens)
 
     def plot_weibull_cdf(self):
@@ -287,6 +296,11 @@ class Fit:
         :return:
         """
         return  self._total_failures
+
+    @property
+    def method(self):
+
+        return self._method
 
 
 
