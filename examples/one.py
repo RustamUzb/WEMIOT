@@ -1,5 +1,12 @@
+import os, sys
+
+#Following lines are for assigning parent directory dynamically.
+dir_path = os.path.dirname(os.path.realpath(__file__))
+parent_dir_path = os.path.abspath(os.path.join(dir_path, os.pardir))
+sys.path.insert(0, parent_dir_path)
+
+
 import analysis.weibull as weibull
-import analysis.lme as alme
 import pandas as pd
 import numpy as np
 
@@ -8,10 +15,10 @@ import numpy as np
 
 
 #observ_fail = np.array([16, 34, 53, 75, 93])
-#observ_cens = np.array([120, 120, 120, 120, 120])
+#observ_cens = np.array([120, 120, 120, 120, 120])cd
 
 
-#https://www.itl.nist.gov/div898/handbook/apr/section4/apr413.htm
+#https://www.itl.nist.gov/div898/handbook/apr/section4/apr413.htm  beta = 1.7207, eta = 606.52
 #observ_fail = np.array([54, 187, 216, 240, 244, 335, 361, 373, 375, 386])
 #observ_cens = np.array([500, 500,500, 500, 500, 500, 500, 500, 500, 500])
 
