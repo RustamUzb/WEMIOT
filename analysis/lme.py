@@ -30,7 +30,7 @@ def lme_weibull(failed, censored):
     while lme > 0.000000000001:
         lme = likehood_weibull(beta_init, failed, censored)
         #Newton-raphson
-        beta_init = beta_init - beta_init - (lme / grad_lme(beta_init, failed, censored))
+        beta_init = beta_init - (lme / grad_lme(beta_init, failed, censored))
     beta = beta_init
     eta = eta_estimation (beta, failed, censored)
 
