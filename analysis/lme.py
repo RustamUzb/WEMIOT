@@ -27,12 +27,10 @@ def lme_weibull(failed, censored):
     grad_lme = grad(likehood_weibull,0)
 
     lme = 1
-    cnt = 1
     while lme > 0.000000000001:
         lme = likehood_weibull(beta_init, failed, censored)
-        #print("cnt:",cnt,"beta:", beta_init, " loss:", lme, " grad:", grad_lme(beta_init,failed, censored))
-        beta_init = beta_init - grad_lme(beta_init,failed, censored) * 0.7
-        cnt += 1
+        #Newton-raphson
+        beta_init = beta_init - beta_init - (lme / grad_lme(beta_init, failed, censored))
     beta = beta_init
     eta = eta_estimation (beta, failed, censored)
 
