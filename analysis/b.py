@@ -1,4 +1,5 @@
 import analysis.weibull as w
+import analysis.util as util
 import numpy as np
 from scipy.stats import weibull_min
 
@@ -19,7 +20,7 @@ fail01 = [45, 46, 34, 45, 32, 24, 58, 79, 56, 63, 34, 50]
 # C.5
 # shape = 2.257
 # scale = 4900.1
-fail02 = [1500.0, 2250.0, 4000.0, 4300.0, 7000.0]
+fail02 = [1500.0, 7000.0, 2250.0, 4000.0, 4300.0]
 cens02 = [1750.0, 5000.0]
 
 #https://www.itl.nist.gov/div898/handbook/apr/section4/apr413.htm  beta = 1.7207, eta = 606.52
@@ -34,7 +35,7 @@ fail04 = [105, 125, 128, 143, 148, 152, 197]
 cens04 = [102, 112, 116, 121, 134, 137, 149, 162, 165]
 
 
-# from Manchester Univerity M04 course (tab 4.1)
+# from Manchester Univerity M04 course (tab 4.2)
 # originally used rank regression method
 #shape 3.0
 #sclae 8200
@@ -55,10 +56,18 @@ fail06 = [1.46, 13.75, 137.20, 229.02, 309.39, 373.32, 475.20, 637.80, 767.58, 9
           581.00, 744.69, 876.76, 1010.75, 1151.90, 1445.69, 1820.57, 2821.35, 13.70, 108.18, 225.62, 273.86, 356.29,
           470.50, 594.39, 760.17, 915.23, 1039.14, 1238.87, 1491.42, 1910.09, 2868.16]
 
+# the new Weibull by Robert B. Abernethy
+# Table 2-2
+# shape = 2.165
+# scale = 79.802
+fail07 = [30.0, 49.0, 82.0, 90.0, 96.0]
+cens07 = [10.0, 45.0, 100.0]
 
 wd = w.Weibull()
-wd.fit(fail06, method='2pComplete', CF=0.90)
-#wd.fit(fail01, cens01, '2pCensored')
+#wd.fit(fail06, method='2pComplete', CF=0.90)
+wd.fit(failures=fail07, censored=cens07, method='2pMRRCensored')
 wd.printResults()
-print(wd.mean())
-wd.plotpdf()
+#print(wd.mean())
+wd.plotcdf()
+
+

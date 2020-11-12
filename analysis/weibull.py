@@ -3,7 +3,9 @@ from jax import jacfwd, jacrev
 from jax.numpy import linalg
 import scipy.stats as ss
 import matplotlib.pyplot as plt
+import pandas as pd
 
+import analysis.util as util
 import logging
 
 
@@ -11,8 +13,10 @@ class Weibull:
 
     def __init__(self, *args, **kwargs):
 
-        self.failures = jnp.zeros(1)
-        self.censored = jnp.zeros(1)
+        self.df = None
+
+        self.failures = None
+        self.censored = None
         self.shape = None
         self.scale = None
         self.loc = 0.0
@@ -34,6 +38,7 @@ class Weibull:
 
         self.method = ''
         self.converged = False
+
 
     def __fitComplete2pMLE(self):
         # initial guess:
@@ -95,7 +100,7 @@ class Weibull:
 
         epoch = 0
         total = 1
-        logging.info('intit paramenters: ', parameters)
+        print('intit paramenters: ', parameters)
         while not (total < 0.09 or epoch > 200):
             epoch += 1
             grads = J(parameters)
@@ -105,7 +110,7 @@ class Weibull:
             # Newton-Raphson maximisation
             parameters -= q * hess @ grads
             total = abs(grads[0]) + abs(grads[1])
-            logging.info('Epoch: ', epoch, 'Param: ', parameters, ' grad:', grads, ' Q:',q, hess[0][0], hess[1][1])
+            print('Epoch: ', epoch, 'Param: ', parameters, ' grad:', grads, ' Q:',q, hess[0][0], hess[1][1])
         if epoch < 200:
             self.converged = True
             self.shape = parameters[0]
@@ -119,6 +124,8 @@ class Weibull:
             self.shapeTSLB = self.shape / jnp.exp((ZT * jnp.sqrt(abs(hess[0][0]))) / self.shape)
             self.scaleTSUB = self.scale * jnp.exp((ZT * jnp.sqrt(abs(hess[1][1]))) / self.scale)
             self.scaleTSLB = self.scale / jnp.exp((ZT * jnp.sqrt(abs(hess[1][1]))) / self.scale)
+            #TODO check this statement * or /
+            #self.alpha_lower = self.alpha * (np.exp(-Z * (self.alpha_SE / self.alpha)))
 
             self.shapeOSUB = self.shape * jnp.exp((ZO * jnp.sqrt(abs(hess[0][0]))) / self.shape)
             self.shapeOSLB = self.shape / jnp.exp((ZO * jnp.sqrt(abs(hess[0][0]))) / self.shape)
@@ -132,7 +139,38 @@ class Weibull:
             self.scale = 0.0
             self.method = '2pTypeICensored'
 
+    def __fitCensoredMRR(self):
+        f = jnp.hstack((jnp.atleast_2d(self.failures).T, jnp.zeros((self.failures.shape[0], 1))))
+        f = f[f[:, 0].argsort()]
+        f = jnp.hstack((f, jnp.reshape(jnp.arange(self.failures.shape[0]), (self.failures.shape[0], -1))))
+        # censored items will be having flag '1'
+        c = jnp.hstack((jnp.atleast_2d(self.censored).T, jnp.ones((self.censored.shape[0], 1))))
+        c = jnp.hstack((c, jnp.reshape(jnp.empty(self.censored.shape[0]), (self.censored.shape[0], -1))))
 
+        d = jnp.concatenate((c, f), axis=0)
+        d = d[d[:, 0].argsort()]
+
+        self.df = pd.DataFrame(data=d , columns=['time', 'is_cens', 'fo'])
+        self.df['X'] = jnp.log(self.df['time'].to_numpy())
+        N = len(self.df.index)
+        self.df['new_increment'] = (N + 1 - self.df['fo'])/(N + 2 - self.df.index.values)
+        m = 1.0 - self.df['new_increment'].min()
+        self.df['new_increment'] = self.df['new_increment'] + m
+        self.df = self.df.drop(self.df[self.df['is_cens'] == 1].index)
+        self.df['new_order_num'] = self.df['new_increment'].cumsum()
+
+        self.df['mr'] = util.median_rank(N, self.df['new_order_num'], 0.5)
+        #self.df['lb'] = util.median_rank(N, self.df['new_order_num'], 0.05)
+        #self.df['ub'] = util.median_rank(N, self.df['new_order_num'], 0.95)
+
+        self.df['Ymr'] = jnp.log(jnp.log(1.0 / (1.0 - util.median_rank(N, self.df['new_order_num'], 0.5))))
+        #self.df['Ylb'] = jnp.log(jnp.log(1.0 / (1.0 - util.median_rank(N, self.df['new_order_num'], 0.05))))
+        #self.df['Yub'] = jnp.log(jnp.log(1.0 / (1.0 - util.median_rank(N, self.df['new_order_num'], 0.95))))
+        print(self.df)
+
+        slope, intercept, r, p, std = ss.linregress(self.df['X'], self.df['Ymr'])
+        self.shape = slope
+        self.scale = jnp.exp(-intercept / slope)
 
 
     def __logLikelihood2pComp(self, x):
@@ -154,19 +192,23 @@ class Weibull:
     def fit(self, failures, censored=None, method='all', mixTest = True, CF=0.95):
         self.CF = CF
         self.failures = jnp.array(failures)
-        #if censored is not None:
-        #    self.censored = jnp.array(censored)
+        if censored is not None:
+            self.censored = jnp.array(censored)
+        else:
+            self.censored = jnp.zeros(1)
 
-        if method == '2pComplete':
+        if method == '2pMLEComplete':
             print('2p Complete')
             self.__fitComplete2pMLE()
-        elif method == '2pCensored':
+        elif method == '2pMLECensored':
             if censored is not None:
                 logging.info('2p Censored')
                 self.__fitTypeICensored2pMLE()
             else:
                 # TODO raise error
                 print('Censored data must be provided')
+        elif method == '2pMRRCensored':
+            self.__fitCensoredMRR()
 
     def printResults(self):
         print('----------------------------------------------------')
@@ -185,11 +227,11 @@ class Weibull:
         elif bound == 'OSLB':
             v = ss.weibull_min.pdf(x, c=self.shapeOSLB, loc=self.locOSLB, scale=self.scaleOSLB)
         elif bound == 'TSLB':
-            v = ss.weibull_min.pdf(x, c=self.shapeTSLB, loc=self.locTSLB, scale=self.scaleTSLB)
+            v = ss.weibull_min.pdf(x, c=self.shapeTSLB, loc=self.locTSLB, scale=self.scale)
         elif bound == 'OSUB':
             v = ss.weibull_min.pdf(x, c=self.shapeOSUB, loc=self.locOSUB, scale=self.scaleOSUB)
         elif bound == 'TSUB':
-            v = ss.weibull_min.pdf(x, c=self.shapeTSUB, loc=self.locTSUB, scale=self.scaleTSUB)
+            v = ss.weibull_min.pdf(x, c=self.shapeTSUB, loc=self.locTSUB, scale=self.scale)
         return v
 
     def cdf(self, x, bound=None):
@@ -306,18 +348,26 @@ class Weibull:
         plt.show()
 
 
-    def plotpdf(self):
+    def plotcdf(self):
+        '''
 
-        #ax.fill_between(x, LB, UB, alpha=0.2)
+        :return:
+
         xadd = self.failures.min() / 3
         x = jnp.arange(self.failures.min() - xadd, self.failures.max() + xadd,
                        ((self.failures.min() - xadd) + (self.failures.max() + xadd)) / 200)
-        y = self.pdf(x)
-        LB = self.pdf(x, 'TSLB')
-        UB = self.pdf(x, 'TSUB')
-
+        y = self.cdf(x)
+        f = self.cdf(self.failures)
+        LB = self.cdf(x, 'TSLB')
+        UB = self.cdf(x, 'TSUB')
+        '''
         fig, ax = plt.subplots()
-        ax.plot(x, y)
-        ax.fill_between(x, LB, UB, alpha=0.2)
+        #ax.plot(x, y)
+        #ax.fill_between(x, LB, UB, alpha=0.2, interpolate=False)
+        #plt.loglog(x, y)
+        #plt.loglog(self.failures, f, 'bo')
+        #plt.grid(True, which="both", ls="-")
+        ax.set_xscale('log')
+        ax.plot(self.df['time'], self.df['mr'], 'o', color='tab:brown')
         #plt.grid(True, which="both", ls="-", zorder=3)
         plt.show()
