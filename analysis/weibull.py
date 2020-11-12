@@ -11,8 +11,8 @@ class Weibull:
 
     def __init__(self, *args, **kwargs):
 
-        self.failures = jnp.zeros(1)
-        self.censored = jnp.zeros(1)
+        self.failures = None
+        self.censored = None
         self.shape = None
         self.scale = None
         self.loc = 0.0
@@ -95,7 +95,7 @@ class Weibull:
 
         epoch = 0
         total = 1
-        logging.info('intit paramenters: ', parameters)
+        print('intit paramenters: ', parameters)
         while not (total < 0.09 or epoch > 200):
             epoch += 1
             grads = J(parameters)
@@ -105,7 +105,7 @@ class Weibull:
             # Newton-Raphson maximisation
             parameters -= q * hess @ grads
             total = abs(grads[0]) + abs(grads[1])
-            logging.info('Epoch: ', epoch, 'Param: ', parameters, ' grad:', grads, ' Q:',q, hess[0][0], hess[1][1])
+            print('Epoch: ', epoch, 'Param: ', parameters, ' grad:', grads, ' Q:',q, hess[0][0], hess[1][1])
         if epoch < 200:
             self.converged = True
             self.shape = parameters[0]
@@ -154,8 +154,10 @@ class Weibull:
     def fit(self, failures, censored=None, method='all', mixTest = True, CF=0.95):
         self.CF = CF
         self.failures = jnp.array(failures)
-        #if censored is not None:
-        #    self.censored = jnp.array(censored)
+        if censored is not None:
+            self.censored = jnp.array(censored)
+        else:
+            self.censored = jnp.zeros(1)
 
         if method == '2pComplete':
             print('2p Complete')
@@ -185,11 +187,11 @@ class Weibull:
         elif bound == 'OSLB':
             v = ss.weibull_min.pdf(x, c=self.shapeOSLB, loc=self.locOSLB, scale=self.scaleOSLB)
         elif bound == 'TSLB':
-            v = ss.weibull_min.pdf(x, c=self.shapeTSLB, loc=self.locTSLB, scale=self.scaleTSLB)
+            v = ss.weibull_min.pdf(x, c=self.shapeTSLB, loc=self.locTSLB, scale=self.scale)
         elif bound == 'OSUB':
             v = ss.weibull_min.pdf(x, c=self.shapeOSUB, loc=self.locOSUB, scale=self.scaleOSUB)
         elif bound == 'TSUB':
-            v = ss.weibull_min.pdf(x, c=self.shapeTSUB, loc=self.locTSUB, scale=self.scaleTSUB)
+            v = ss.weibull_min.pdf(x, c=self.shapeTSUB, loc=self.locTSUB, scale=self.scale)
         return v
 
     def cdf(self, x, bound=None):
@@ -306,18 +308,18 @@ class Weibull:
         plt.show()
 
 
-    def plotpdf(self):
+    def plotcdf(self):
 
         #ax.fill_between(x, LB, UB, alpha=0.2)
         xadd = self.failures.min() / 3
         x = jnp.arange(self.failures.min() - xadd, self.failures.max() + xadd,
                        ((self.failures.min() - xadd) + (self.failures.max() + xadd)) / 200)
-        y = self.pdf(x)
-        LB = self.pdf(x, 'TSLB')
-        UB = self.pdf(x, 'TSUB')
+        y = self.cdf(x)
+        LB = self.cdf(x, 'TSLB')
+        UB = self.cdf(x, 'TSUB')
 
         fig, ax = plt.subplots()
         ax.plot(x, y)
-        ax.fill_between(x, LB, UB, alpha=0.2)
+        ax.fill_between(x, LB, UB, alpha=0.2, interpolate=False)
         #plt.grid(True, which="both", ls="-", zorder=3)
         plt.show()

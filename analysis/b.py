@@ -57,8 +57,8 @@ fail06 = [1.46, 13.75, 137.20, 229.02, 309.39, 373.32, 475.20, 637.80, 767.58, 9
 
 
 wd = w.Weibull()
-wd.fit(fail06, method='2pComplete', CF=0.90)
-#wd.fit(fail01, cens01, '2pCensored')
+#wd.fit(fail06, method='2pComplete', CF=0.90)
+wd.fit(failures=fail02, censored=cens02, method='2pCensored')
 wd.printResults()
 print(wd.mean())
-wd.plotpdf()
+wd.plotcdf()
