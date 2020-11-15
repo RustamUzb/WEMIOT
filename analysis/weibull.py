@@ -85,6 +85,7 @@ class Weibull:
             self.shape = 0.0
             self.scale = 0.0
             self.method = '2pComplete'
+            self.r2 = None
 
         #print(self.shape, self.scale, epoch)
 
@@ -100,7 +101,6 @@ class Weibull:
 
         epoch = 0
         total = 1
-        print('intit paramenters: ', parameters)
         while not (total < 0.09 or epoch > 200):
             epoch += 1
             grads = J(parameters)
@@ -171,6 +171,7 @@ class Weibull:
         slope, intercept, r, p, std = ss.linregress(self.df['X'], self.df['Ymr'])
         self.shape = slope
         self.scale = jnp.exp(-intercept / slope)
+        self.r2 = r**2
 
 
     def __logLikelihood2pComp(self, x):
