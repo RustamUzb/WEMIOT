@@ -6,14 +6,16 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 import analysis.util as util
-import logging
+from analysis.util import Method
+
 
 
 class Weibull:
 
     def __init__(self, *args, **kwargs):
 
-        self.df = None
+        self.plot_df = None
+        self.lineq_param = []
 
         self.failures = None
         self.censored = None
@@ -60,7 +62,7 @@ class Weibull:
             # Newton-Raphson maximisation
             parameters -= q * hess @ grads
             total = abs(grads[0]) + abs(grads[1])
-            #print('epoch: ', epoch, 'parameters: ', ' param: ', parameters, ' grad:', grads, ' Q:',q)
+
         if epoch < 200:
             self.converged = True
             self.shape = parameters[0]
@@ -84,9 +86,9 @@ class Weibull:
             self.converged = False
             self.shape = 0.0
             self.scale = 0.0
-            self.method = '2pComplete'
+            self.method = Method.MLEComplete2p
+            self.r2 = None
 
-        #print(self.shape, self.scale, epoch)
 
 
     def __fitTypeICensored2pMLE(self):
@@ -100,7 +102,6 @@ class Weibull:
 
         epoch = 0
         total = 1
-        print('intit paramenters: ', parameters)
         while not (total < 0.09 or epoch > 200):
             epoch += 1
             grads = J(parameters)
@@ -115,7 +116,7 @@ class Weibull:
             self.converged = True
             self.shape = parameters[0]
             self.scale = parameters[1]
-            self.method = '2pTypeICensored'
+            self.method = Method.MLECensored2p
 
             # Fisher Matrix confidence bound
             ZO = -ss.norm.ppf(1 - self.CF)
@@ -137,7 +138,7 @@ class Weibull:
             self.converged = False
             self.shape = 0.0
             self.scale = 0.0
-            self.method = '2pTypeICensored'
+            self.method = Method.MLECensored2p
 
     def __fitCensoredMRR(self):
         f = jnp.hstack((jnp.atleast_2d(self.failures).T, jnp.zeros((self.failures.shape[0], 1))))
@@ -150,27 +151,32 @@ class Weibull:
         d = jnp.concatenate((c, f), axis=0)
         d = d[d[:, 0].argsort()]
 
-        self.df = pd.DataFrame(data=d , columns=['time', 'is_cens', 'fo'])
-        self.df['X'] = jnp.log(self.df['time'].to_numpy())
-        N = len(self.df.index)
-        self.df['new_increment'] = (N + 1 - self.df['fo'])/(N + 2 - self.df.index.values)
-        m = 1.0 - self.df['new_increment'].min()
-        self.df['new_increment'] = self.df['new_increment'] + m
-        self.df = self.df.drop(self.df[self.df['is_cens'] == 1].index)
-        self.df['new_order_num'] = self.df['new_increment'].cumsum()
+        df = pd.DataFrame(data=d , columns=['time', 'is_cens', 'fo'])
+        df['X'] = jnp.log(df['time'].to_numpy())
+        N = len(df.index)
+        df['new_increment'] = (N + 1 - df['fo'])/(N + 2 - df.index.values)
+        m = 1.0 - df['new_increment'].min()
+        df['new_increment'] = df['new_increment'] + m
+        df = df.drop(df[df['is_cens'] == 1].index)
+        df['new_order_num'] = df['new_increment'].cumsum()
 
-        self.df['mr'] = util.median_rank(N, self.df['new_order_num'], 0.5)
-        #self.df['lb'] = util.median_rank(N, self.df['new_order_num'], 0.05)
-        #self.df['ub'] = util.median_rank(N, self.df['new_order_num'], 0.95)
+        df['mr'] = util.median_rank(N, df['new_order_num'], 0.5)
+        #cdf
+        df['Ymr'] = jnp.log(jnp.log(1.0 / (1.0 - util.median_rank(N, df['new_order_num'], 0.5))))
 
-        self.df['Ymr'] = jnp.log(jnp.log(1.0 / (1.0 - util.median_rank(N, self.df['new_order_num'], 0.5))))
-        #self.df['Ylb'] = jnp.log(jnp.log(1.0 / (1.0 - util.median_rank(N, self.df['new_order_num'], 0.05))))
-        #self.df['Yub'] = jnp.log(jnp.log(1.0 / (1.0 - util.median_rank(N, self.df['new_order_num'], 0.95))))
-        print(self.df)
 
-        slope, intercept, r, p, std = ss.linregress(self.df['X'], self.df['Ymr'])
+        slope, intercept, r, p, std = ss.linregress(df['X'], df['Ymr'])
+        self.lineq_param = [slope, intercept]
         self.shape = slope
         self.scale = jnp.exp(-intercept / slope)
+
+        df['ub'] = (jnp.log(1.0 / (1.0 - util.median_rank(N, df['new_order_num'], self.CF))) ** (
+                    1.0 / self.shape) * self.scale)
+        df['lb'] = (jnp.log(1.0 / (1.0 - util.median_rank(N, df['new_order_num'], 1.0 - self.CF))) ** (
+                    1.0 / self.shape) * self.scale)
+        self.r2 = r**2
+        self.plot_df = df[['time', 'X', 'Ymr', 'mr', 'lb', 'ub']]
+        self.method = Method.MRRCensored2p
 
 
     def __logLikelihood2pComp(self, x):
@@ -197,29 +203,30 @@ class Weibull:
         else:
             self.censored = jnp.zeros(1)
 
-        if method == '2pMLEComplete':
-            print('2p Complete')
+        if method == Method.MLEComplete2p:
             self.__fitComplete2pMLE()
-        elif method == '2pMLECensored':
+        elif method == Method.MLECensored2p:
             if censored is not None:
-                logging.info('2p Censored')
                 self.__fitTypeICensored2pMLE()
             else:
                 # TODO raise error
                 print('Censored data must be provided')
-        elif method == '2pMRRCensored':
+        elif method == Method.MRRCensored2p:
             self.__fitCensoredMRR()
 
-    def printResults(self):
-        print('----------------------------------------------------')
-        print('Method: ', self.method)
-        print('Shape: ', self.shape, 'Scale: ', self.scale, 'Loc: ', self.loc)
-        print('Confidence bounds (One side):')
-        print('Shape Lower: ', self.shapeOSLB, 'Shape Upper: ', self.shapeOSUB)
-        print('Scale Lower: ', self.scaleOSLB, 'Scale Upper: ', self.scaleOSUB)
-        print('Confidence bounds (Two side side):')
-        print('Shape Lower: ', self.shapeTSLB, 'Shape Upper: ', self.shapeTSUB)
-        print('Scale Lower: ', self.scaleTSLB, 'Scale Upper: ', self.scaleTSUB)
+    def printResults(self, to_file=False):
+        if not to_file:
+            index = ['Shape', 'Scale', 'Location']
+            colm = ['*Est Value*', 'Lowe bound', 'Upper bound']
+            data = [[self.shape, self.shapeOSLB, self.shapeOSUB], [self.scale, self.scaleOSLB, self.scaleOSUB],
+                    [self.loc, self.locOSLB, self.locOSUB]]
+            prdf = pd.DataFrame(data, columns=colm, index=index)
+            print(prdf)
+
+    def printEstData(self, to_file=False):
+        if not to_file:
+            with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+                print(self.plot_df)
 
     def pdf(self, x, bound=None):
         if bound is None:
@@ -348,26 +355,15 @@ class Weibull:
         plt.show()
 
 
-    def plotcdf(self):
-        '''
+    def showplot(self):
 
-        :return:
-
-        xadd = self.failures.min() / 3
-        x = jnp.arange(self.failures.min() - xadd, self.failures.max() + xadd,
-                       ((self.failures.min() - xadd) + (self.failures.max() + xadd)) / 200)
-        y = self.cdf(x)
-        f = self.cdf(self.failures)
-        LB = self.cdf(x, 'TSLB')
-        UB = self.cdf(x, 'TSUB')
-        '''
         fig, ax = plt.subplots()
-        #ax.plot(x, y)
-        #ax.fill_between(x, LB, UB, alpha=0.2, interpolate=False)
-        #plt.loglog(x, y)
-        #plt.loglog(self.failures, f, 'bo')
-        #plt.grid(True, which="both", ls="-")
-        ax.set_xscale('log')
-        ax.plot(self.df['time'], self.df['mr'], 'o', color='tab:brown')
-        #plt.grid(True, which="both", ls="-", zorder=3)
+        #ax.set_xscale('log')
+
+        y = self.lineq_param[0] * self.plot_df['X'] + self.lineq_param[1]
+        print(y)
+        ax.plot(self.plot_df['X'], y)
+        ax.plot(self.plot_df['X'], self.plot_df['Ymr'], 'o', color='tab:brown')
+        ax.plot(jnp.log(self.plot_df['lb'].to_numpy()), self.plot_df['Ymr'])
+        ax.plot(jnp.log(self.plot_df['ub'].to_numpy()), self.plot_df['Ymr'])
         plt.show()

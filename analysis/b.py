@@ -1,5 +1,5 @@
 import analysis.weibull as w
-import analysis.util as util
+from analysis.util import Method
 import numpy as np
 from scipy.stats import weibull_min
 
@@ -16,7 +16,7 @@ dist = weibull_min.rvs(t[0], loc=0, scale=t[1], size=size, random_state=1)
 cens01 = [23, 24, 57, 78, 76, 85, 51, 59]
 fail01 = [45, 46, 34, 45, 32, 24, 58, 79, 56, 63, 34, 50]
 
-# the new Weibull by Robert B. Abernethy
+# the new WEMIOT by Robert B. Abernethy
 # C.5
 # shape = 2.257
 # scale = 4900.1
@@ -56,18 +56,19 @@ fail06 = [1.46, 13.75, 137.20, 229.02, 309.39, 373.32, 475.20, 637.80, 767.58, 9
           581.00, 744.69, 876.76, 1010.75, 1151.90, 1445.69, 1820.57, 2821.35, 13.70, 108.18, 225.62, 273.86, 356.29,
           470.50, 594.39, 760.17, 915.23, 1039.14, 1238.87, 1491.42, 1910.09, 2868.16]
 
-# the new Weibull by Robert B. Abernethy
+# the new WEMIOT by Robert B. Abernethy
 # Table 2-2
-# shape = 2.165
-# scale = 79.802
+# shape = 2.024
+# scale = 94.998
 fail07 = [30.0, 49.0, 82.0, 90.0, 96.0]
 cens07 = [10.0, 45.0, 100.0]
 
 wd = w.Weibull()
 #wd.fit(fail06, method='2pComplete', CF=0.90)
-wd.fit(failures=fail07, censored=cens07, method='2pMRRCensored')
+wd.fit(failures=fail07, censored=cens07, method=Method.MRRCensored2p)
 wd.printResults()
 #print(wd.mean())
-wd.plotcdf()
+wd.printEstData()
+wd.showplot()
 
 
