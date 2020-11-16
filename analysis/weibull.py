@@ -111,7 +111,7 @@ class Weibull:
             # Newton-Raphson maximisation
             parameters -= q * hess @ grads
             total = abs(grads[0]) + abs(grads[1])
-            print('Epoch: ', epoch, 'Param: ', parameters, ' grad:', grads, ' Q:',q, hess[0][0], hess[1][1])
+            #print('Epoch: ', epoch, 'Param: ', parameters, ' grad:', grads, ' Q:',q, hess[0][0], hess[1][1])
         if epoch < 200:
             self.converged = True
             self.shape = parameters[0]
@@ -195,8 +195,21 @@ class Weibull:
                         (jnp.sum(self.failures**x[0]) + jnp.sum(self.censored ** x[0]))
         return logl
 
-    def fit(self, failures, censored=None, method='all', mixTest = True, CF=0.95):
-        self.CF = CF
+    def fit(self, failures, censored=None, method=Method.AUTO, mixTest = True, CL=0.95):
+        '''
+
+        :param failures: list of failure times/cycles. float or int
+        :param censored: list of times times/cycles when item was withdrawn or fail with a different failure mode. float or int
+        :param method: Method which will be used to estimate parameters of weibull based on provided data. Instance of class analysis.util.Method
+        TODO :param mixTest:
+        :param CL: a number between 0.01 to 0.99 which is represent level of confidence that estimated parameter is in
+        the desired range. http://reliawiki.org/index.php/Confidence_Bounds  For One-side confidence interval  the range
+        is equal to CL and can be upper or low . For Two-sided confidence interval the range lies between (1.0-CL)/2
+        and  1.0 - (1.0-CL)/2. upper and lower bounds for both one-seded and two-sided are calculated if method is MLE,
+        for MRR upper and lower bound calculated for one-sided interval only
+        :return: True - if converged , False - if not converged
+        '''
+        self.CF = CL
         self.failures = jnp.array(failures)
         if censored is not None:
             self.censored = jnp.array(censored)
@@ -213,6 +226,7 @@ class Weibull:
                 print('Censored data must be provided')
         elif method == Method.MRRCensored2p:
             self.__fitCensoredMRR()
+        return self.converged
 
     def printResults(self, to_file=False):
         if not to_file:
@@ -334,6 +348,9 @@ class Weibull:
             v = (self.shapeTSUB / self.scaleTSUB) * (((x - self.locTSUB) / self.scaleTSUB) ** (self.shapeTSUB - 1.0))
         return v
 
+    def bLive(self, x , CB=None):
+        #TODO linear interpolation if Method.MRR
+        return None
     #cumulative hazard function
     def chf(self, bound=None):
         #TODO (find valid refference for calculation)

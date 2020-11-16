@@ -3,7 +3,7 @@ from enum import Enum
 
 '''
 Method returns median rank based on Confidence level (tables in books usually contain 
-tables for CI 0.5, 0.05, and 0.95), rank order, and sample size
+tables for CL 0.5, 0.05, and 0.95), rank order, and sample size
 
 '''
 def median_rank(samp_size, rank_order, CI):
@@ -12,7 +12,8 @@ def median_rank(samp_size, rank_order, CI):
     return beta.ppf(CI, a, b) # first
 
 class Method(Enum):
-    MLEComplete2p = 1
-    MLECensored2p = 2
-    MRRCensored2p = 3
+    AUTO = 1
+    MLEComplete2p = 2
+    MLECensored2p = 3
+    MRRCensored2p = 4
 
