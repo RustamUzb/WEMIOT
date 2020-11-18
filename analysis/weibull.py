@@ -4,6 +4,7 @@ from jax.numpy import linalg
 import scipy.stats as ss
 import matplotlib.pyplot as plt
 import pandas as pd
+from tabulate import tabulate
 
 import analysis.util as util
 from analysis.util import Method
@@ -14,15 +15,22 @@ class Weibull:
 
     def __init__(self, *args, **kwargs):
 
-        self.plot_df = None
-        self.lineq_param = []
+        self.mmr_df = None
+        self.r2 = None
 
         self.failures = None
         self.censored = None
         self.shape = None
         self.scale = None
         self.loc = 0.0
-        self.CF = None
+        self.CL = None
+        # one-sided and two-sided bound for parameters (fisher matrix)
+        # [shape, scale, loc]
+        self.TSUBpar = []
+        self.TSLBpar = []
+        self.OSUBpar = []
+        self.OSLBpar = []
+
         # two-side bounds
         self.shapeTSUB = None
         self.scaleTSUB = None
@@ -69,8 +77,8 @@ class Weibull:
             self.scale = parameters[1]
             self.method = '2pComplete'
             # Fisher Matrix confidence bound
-            ZO = -ss.norm.ppf(1 - self.CF)
-            ZT = -ss.norm.ppf((1 - self.CF) / 2)
+            ZO = -ss.norm.ppf(1 - self.CL)
+            ZT = -ss.norm.ppf((1 - self.CL) / 2)
             self.shapeTSUB = self.shape * jnp.exp((ZT * jnp.sqrt(abs(hess[0][0]))) / self.shape)
             self.shapeTSLB = self.shape / jnp.exp((ZT * jnp.sqrt(abs(hess[0][0]))) / self.shape)
             self.scaleTSUB = self.scale * jnp.exp((ZT * jnp.sqrt(abs(hess[1][1]))) / self.scale)
@@ -87,7 +95,6 @@ class Weibull:
             self.shape = 0.0
             self.scale = 0.0
             self.method = Method.MLEComplete2p
-            self.r2 = None
 
 
 
@@ -119,8 +126,8 @@ class Weibull:
             self.method = Method.MLECensored2p
 
             # Fisher Matrix confidence bound
-            ZO = -ss.norm.ppf(1 - self.CF)
-            ZT = -ss.norm.ppf((1 - self.CF) / 2)
+            ZO = -ss.norm.ppf(1 - self.CL)
+            ZT = -ss.norm.ppf((1 - self.CL) / 2)
             self.shapeTSUB = self.shape * jnp.exp((ZT * jnp.sqrt(abs(hess[0][0]))) / self.shape)
             self.shapeTSLB = self.shape / jnp.exp((ZT * jnp.sqrt(abs(hess[0][0]))) / self.shape)
             self.scaleTSUB = self.scale * jnp.exp((ZT * jnp.sqrt(abs(hess[1][1]))) / self.scale)
@@ -136,8 +143,8 @@ class Weibull:
         else:
             # if more than 200 epoch it would be considered that fit is not converged
             self.converged = False
-            self.shape = 0.0
-            self.scale = 0.0
+            self.shape = None
+            self.scale = None
             self.method = Method.MLECensored2p
 
     def __fitCensoredMRR(self):
@@ -167,15 +174,16 @@ class Weibull:
 
         slope, intercept, r, p, std = ss.linregress(df['X'], df['Ymr'])
         self.lineq_param = [slope, intercept]
+        # assigning estimated parameters
         self.shape = slope
         self.scale = jnp.exp(-intercept / slope)
 
-        df['ub'] = (jnp.log(1.0 / (1.0 - util.median_rank(N, df['new_order_num'], self.CF))) ** (
+        df['ub'] = (jnp.log(1.0 / (1.0 - util.median_rank(N, df['new_order_num'], self.CL))) ** (
                     1.0 / self.shape) * self.scale)
-        df['lb'] = (jnp.log(1.0 / (1.0 - util.median_rank(N, df['new_order_num'], 1.0 - self.CF))) ** (
+        df['lb'] = (jnp.log(1.0 / (1.0 - util.median_rank(N, df['new_order_num'], 1.0 - self.CL))) ** (
                     1.0 / self.shape) * self.scale)
         self.r2 = r**2
-        self.plot_df = df[['time', 'X', 'Ymr', 'mr', 'lb', 'ub']]
+        self.mmr_df = df[['time', 'X', 'Ymr', 'mr', 'lb', 'ub']]
         self.method = Method.MRRCensored2p
 
 
@@ -195,21 +203,27 @@ class Weibull:
                         (jnp.sum(self.failures**x[0]) + jnp.sum(self.censored ** x[0]))
         return logl
 
-    def fit(self, failures, censored=None, method=Method.AUTO, mixTest = True, CL=0.95):
+    def fit(self, failures, censored=None, method=Method.AUTO, CL=0.95, mixTest = True, failureCode=None,
+            classCode=None, eqId=None):
         '''
 
         :param failures: list of failure times/cycles. float or int
         :param censored: list of times times/cycles when item was withdrawn or fail with a different failure mode. float or int
-        :param method: Method which will be used to estimate parameters of weibull based on provided data. Instance of class analysis.util.Method
+        :param method: Method which will be used to estimate parameters of weibull based on provided data. Instance of
+         class analysis.util.Method. default: Method.AUTO which automatically decide which method to used based on number
+         of failure records.
         TODO :param mixTest:
         :param CL: a number between 0.01 to 0.99 which is represent level of confidence that estimated parameter is in
         the desired range. http://reliawiki.org/index.php/Confidence_Bounds  For One-side confidence interval  the range
         is equal to CL and can be upper or low . For Two-sided confidence interval the range lies between (1.0-CL)/2
         and  1.0 - (1.0-CL)/2. upper and lower bounds for both one-seded and two-sided are calculated if method is MLE,
         for MRR upper and lower bound calculated for one-sided interval only
+        :param failureCode: concerned failure code. optional
+        :param classCode: concerned class code as per ISO-14224. optional
+        :param eqId: optinal description or model number of equipment
         :return: True - if converged , False - if not converged
         '''
-        self.CF = CL
+        self.CL = CL
         self.failures = jnp.array(failures)
         if censored is not None:
             self.censored = jnp.array(censored)
@@ -229,18 +243,26 @@ class Weibull:
         return self.converged
 
     def printResults(self, to_file=False):
-        if not to_file:
-            index = ['Shape', 'Scale', 'Location']
-            colm = ['*Est Value*', 'Lowe bound', 'Upper bound']
-            data = [[self.shape, self.shapeOSLB, self.shapeOSUB], [self.scale, self.scaleOSLB, self.scaleOSUB],
-                    [self.loc, self.locOSLB, self.locOSUB]]
-            prdf = pd.DataFrame(data, columns=colm, index=index)
-            print(prdf)
+        if self.method == Method.MLECensored2p:
+            '''
+            print info MMR specific 
+            '''
+            #TODO
+            print('ddd')
+        elif self.method == Method.MRRCensored2p:
+
+            if not to_file:
+                prdf = pd.DataFrame(columns=['a', 'b', 'c', 'd', 'e'])
+                prdf.loc[0] = pd.Series({'a': 'REPORT', 'b': '', 'c': '', 'd': '', 'e': ''})
+                prdf.loc[1] = pd.Series({'a': '', 'b': 'Type: ', 'c': self.method, 'd': '', 'e': ''})
+                prdf.loc[2] = pd.Series({'a': 'INFO', 'b': '', 'c': '', 'd': '', 'e': ''})
+                print(tabulate(prdf, tablefmt='grid', showindex=False))
+
 
     def printEstData(self, to_file=False):
         if not to_file:
             with pd.option_context('display.max_rows', None, 'display.max_columns', None):
-                print(self.plot_df)
+                print(self.mmr_df)
 
     def pdf(self, x, bound=None):
         if bound is None:
@@ -377,10 +399,10 @@ class Weibull:
         fig, ax = plt.subplots()
         #ax.set_xscale('log')
 
-        y = self.lineq_param[0] * self.plot_df['X'] + self.lineq_param[1]
+        y = self.lineq_param[0] * self.mmr_df['X'] + self.lineq_param[1]
         print(y)
-        ax.plot(self.plot_df['X'], y)
-        ax.plot(self.plot_df['X'], self.plot_df['Ymr'], 'o', color='tab:brown')
-        ax.plot(jnp.log(self.plot_df['lb'].to_numpy()), self.plot_df['Ymr'])
-        ax.plot(jnp.log(self.plot_df['ub'].to_numpy()), self.plot_df['Ymr'])
+        ax.plot(self.mmr_df['X'], y)
+        ax.plot(self.mmr_df['X'], self.mmr_df['Ymr'], 'o', color='tab:brown')
+        ax.plot(jnp.log(self.mmr_df['lb'].to_numpy()), self.mmr_df['Ymr'])
+        ax.plot(jnp.log(self.mmr_df['ub'].to_numpy()), self.mmr_df['Ymr'])
         plt.show()
