@@ -5,6 +5,7 @@ import scipy.stats as ss
 import matplotlib.pyplot as plt
 import pandas as pd
 from tabulate import tabulate
+import datetime
 
 import analysis.util as util
 from analysis.util import Method
@@ -242,7 +243,7 @@ class Weibull:
             self.__fitCensoredMRR()
         return self.converged
 
-    def printResults(self, to_file=False):
+    def printResults(self, out='file' ):
         if self.method == Method.MLECensored2p:
             '''
             print info MMR specific 
@@ -250,13 +251,29 @@ class Weibull:
             #TODO
             print('ddd')
         elif self.method == Method.MRRCensored2p:
-
-            if not to_file:
                 prdf = pd.DataFrame(columns=['a', 'b', 'c', 'd', 'e'])
                 prdf.loc[0] = pd.Series({'a': 'REPORT', 'b': '', 'c': '', 'd': '', 'e': ''})
-                prdf.loc[1] = pd.Series({'a': '', 'b': 'Type: ', 'c': self.method, 'd': '', 'e': ''})
-                prdf.loc[2] = pd.Series({'a': 'INFO', 'b': '', 'c': '', 'd': '', 'e': ''})
-                print(tabulate(prdf, tablefmt='grid', showindex=False))
+                prdf.loc[1] = pd.Series({'a': '', 'b': 'Fit: ', 'c': 'MRR', 'd': '', 'e': ''})
+                prdf.loc[1] = pd.Series({'a': '', 'b': 'Date: ', 'c': datetime.datetime.now().strftime("%c"), 'd': '', 'e': ''})
+                prdf.loc[2] = pd.Series({'a': 'USR. INFO', 'b': '', 'c': '', 'd': '', 'e': ''})
+                prdf.loc[3] = pd.Series({'a': '', 'b': 'Failures:', 'c': self.failures.size, 'd': '', 'e': ''})
+                prdf.loc[4] = pd.Series({'a': '', 'b': 'Censored:', 'c': self.censored.size, 'd': '', 'e': ''})
+                prdf.loc[5] = pd.Series({'a': '', 'b': 'Conf. In:', 'c': self.CL, 'd': '', 'e': ''})
+                prdf.loc[6] = pd.Series({'a': 'OUTPUT:', 'b': '', 'c': '', 'd': '', 'e': ''})
+                prdf.loc[7] = pd.Series({'a': '', 'b': 'Shape:', 'c': round(self.shape, 6), 'd': '', 'e': ''})
+                prdf.loc[8] = pd.Series({'a': '', 'b': 'Scale:', 'c': round(self.scale, 2), 'd': '', 'e': ''})
+                prdf.loc[9] = pd.Series({'a': '', 'b': 'Loc:', 'c': round(self.loc, 4), 'd': '', 'e': ''})
+                prdf.loc[10] = pd.Series({'a': '', 'b': 'Rˆ2:', 'c': round(self.r2, 4), 'd': '', 'e': ''})
+
+                if out == 'file':
+                    print(tabulate(prdf, tablefmt='grid', showindex=False))
+                elif out=='json':
+                    prdf = prdf.drop(['a', 'd', 'e'], 1)
+                    prdf = prdf[prdf['b'] !='']
+                    prdf = prdf.reset_index(drop=True)
+                    print(prdf)
+                    xx = prdf.to_json(orient='records')
+                    print(xx)
 
 
     def printEstData(self, to_file=False):
