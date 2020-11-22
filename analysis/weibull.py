@@ -6,9 +6,11 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from tabulate import tabulate
 import datetime
+import configparser
+import os
 
-import analysis.util as util
-from analysis.util import Method
+import util.utilities as util
+from util.utilities import Method
 
 
 
@@ -49,6 +51,9 @@ class Weibull:
 
         self.method = ''
         self.converged = False
+        f = os.path.join(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'conf'),'config.ini')
+        self.config = configparser.ConfigParser()
+        self.config.read(f)
 
 
     def __fitComplete2pMLE(self):
@@ -243,7 +248,7 @@ class Weibull:
             self.__fitCensoredMRR()
         return self.converged
 
-    def printResults(self, out='file' ):
+    def printResults(self, out=None ):
         if self.method == Method.MLECensored2p:
             '''
             print info MMR specific 
@@ -251,29 +256,35 @@ class Weibull:
             #TODO
             print('ddd')
         elif self.method == Method.MRRCensored2p:
-                prdf = pd.DataFrame(columns=['a', 'b', 'c', 'd', 'e'])
-                prdf.loc[0] = pd.Series({'a': 'REPORT', 'b': '', 'c': '', 'd': '', 'e': ''})
-                prdf.loc[1] = pd.Series({'a': '', 'b': 'Fit: ', 'c': 'MRR', 'd': '', 'e': ''})
-                prdf.loc[1] = pd.Series({'a': '', 'b': 'Date: ', 'c': datetime.datetime.now().strftime("%c"), 'd': '', 'e': ''})
-                prdf.loc[2] = pd.Series({'a': 'USR. INFO', 'b': '', 'c': '', 'd': '', 'e': ''})
-                prdf.loc[3] = pd.Series({'a': '', 'b': 'Failures:', 'c': self.failures.size, 'd': '', 'e': ''})
-                prdf.loc[4] = pd.Series({'a': '', 'b': 'Censored:', 'c': self.censored.size, 'd': '', 'e': ''})
-                prdf.loc[5] = pd.Series({'a': '', 'b': 'Conf. In:', 'c': self.CL, 'd': '', 'e': ''})
+                prdf = pd.DataFrame(columns=['a', 'b', 'c'])
+                prdf.loc[0] = pd.Series({'a': 'REPORT', 'b': '', 'c': ''})
+                prdf.loc[1] = pd.Series({'a': '', 'b': 'Fit: ', 'c': 'MRR'})
+                prdf.loc[1] = pd.Series({'a': '', 'b': 'Date: ', 'c': datetime.datetime.now().strftime("%c")})
+                prdf.loc[2] = pd.Series({'a': 'USR. INFO', 'b': '', 'c': ''})
+                prdf.loc[3] = pd.Series({'a': '', 'b': 'Failures:', 'c': str(self.failures.size)})
+                prdf.loc[4] = pd.Series({'a': '', 'b': 'Censored:', 'c': str(self.censored.size)})
+                prdf.loc[5] = pd.Series({'a': '', 'b': 'Conf. In:', 'c': str(self.CL)})
                 prdf.loc[6] = pd.Series({'a': 'OUTPUT:', 'b': '', 'c': '', 'd': '', 'e': ''})
-                prdf.loc[7] = pd.Series({'a': '', 'b': 'Shape:', 'c': round(self.shape, 6), 'd': '', 'e': ''})
-                prdf.loc[8] = pd.Series({'a': '', 'b': 'Scale:', 'c': round(self.scale, 2), 'd': '', 'e': ''})
-                prdf.loc[9] = pd.Series({'a': '', 'b': 'Loc:', 'c': round(self.loc, 4), 'd': '', 'e': ''})
-                prdf.loc[10] = pd.Series({'a': '', 'b': 'Rˆ2:', 'c': round(self.r2, 4), 'd': '', 'e': ''})
+                prdf.loc[7] = pd.Series({'a': '', 'b': 'Shape:', 'c': str(round(self.shape, 6))})
+                prdf.loc[8] = pd.Series({'a': '', 'b': 'Scale:', 'c': str(round(self.scale, 2))})
+                prdf.loc[9] = pd.Series({'a': '', 'b': 'Loc:', 'c': str(round(self.loc, 4))})
+                prdf.loc[10] = pd.Series({'a': '', 'b': 'Rˆ2:', 'c': str(round(self.r2, 4))})
 
+                if  out==None:
+                    out = self.config.get('DEFAULTS', 'printresults')
                 if out == 'file':
-                    print(tabulate(prdf, tablefmt='grid', showindex=False))
+                    fileName = str(datetime.datetime.now().strftime("%m/%d/%Y%H:%M:%S")) + ".cvs"
+                    prdf.to_csv(os.path.join(self.config.get('FOLDER_CONFIG', 'files_dir'),fileName.replace('/','-')))
                 elif out=='json':
-                    prdf = prdf.drop(['a', 'd', 'e'], 1)
+                    prdf = prdf.drop(['a'], 1)
                     prdf = prdf[prdf['b'] !='']
                     prdf = prdf.reset_index(drop=True)
-                    print(prdf)
-                    xx = prdf.to_json(orient='records')
-                    print(xx)
+                    json_split = prdf.to_json(orient='split')
+                    return json_split
+                elif out=='console':
+                    print(tabulate(prdf, tablefmt='grid', showindex=False))
+
+
 
 
     def printEstData(self, to_file=False):

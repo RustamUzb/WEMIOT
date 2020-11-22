@@ -1,0 +1,12 @@
+,a,b,c
+0,REPORT,,
+1,,Date: ,Sun Nov 22 16:31:52 2020
+2,USR. INFO,,
+3,,Failures:,5
+4,,Censored:,2
+5,,Conf. In:,0.95
+6,OUTPUT:,,
+7,,Shape:,1.648583
+8,,Scale:,5544.51
+9,,Loc:,0.0
+10,,Rˆ2:,0.9675
