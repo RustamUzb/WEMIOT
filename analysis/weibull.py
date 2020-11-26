@@ -17,7 +17,7 @@ from util.utilities import *
 class Weibull:
 
     def __init__(self, *args, **kwargs):
-
+        self.N = 0 # total sample size
         self.est_data = None
         self.r2 = None
 
@@ -113,14 +113,10 @@ class Weibull:
             variance = [abs(hess[0][0]), abs(hess[1][1])]
             ZO = -ss.norm.ppf(1 - self.CL)
             ZT = -ss.norm.ppf((1 - self.CL) / 2)
-
             self.TSUBpar = parameters * jnp.exp((ZT * jnp.sqrt(jnp.array(variance))) / parameters)
             self.TSLBpar = parameters * jnp.exp((-ZT * jnp.sqrt(jnp.array(variance))) / parameters)
-
             self.OSUBpar = parameters * jnp.exp((ZO * jnp.sqrt(jnp.array(variance))) / parameters)
             self.OSLBpar = parameters * jnp.exp((-ZO * jnp.sqrt(jnp.array(variance))) / parameters)
-
-
 
         else:
             # if more than 200 epoch it would be considered that fit is not converged
@@ -136,38 +132,20 @@ class Weibull:
         median rank for specified limit (other than 50%).
         :return:
         '''
-        f = jnp.hstack((jnp.atleast_2d(self.failures).T, jnp.zeros((self.failures.shape[0], 1))))
-        f = f[f[:, 0].argsort()]
-        f = jnp.hstack((f, jnp.reshape(jnp.arange(self.failures.shape[0]), (self.failures.shape[0], -1))))
-        # censored items will be having flag '1'
-        c = jnp.hstack((jnp.atleast_2d(self.censored).T, jnp.ones((self.censored.shape[0], 1))))
-        c = jnp.hstack((c, jnp.reshape(jnp.empty(self.censored.shape[0]), (self.censored.shape[0], -1))))
-        d = jnp.concatenate((c, f), axis=0)
-        d = d[d[:, 0].argsort()]
-        df = pd.DataFrame(data=d, columns=['time', 'is_cens', 'fo'])
-        df['X'] = jnp.log(df['time'].to_numpy())
-        N = len(df.index)
-        df['new_increment'] = (N + 1 - df['fo']) / (N + 2 - df.index.values)
-        m = 1.0 - df['new_increment'].min()
-        df['new_increment'] = df['new_increment'] + m
-        df = df.drop(df[df['is_cens'] == 1].index)
-        df['new_order_num'] = df['new_increment'].cumsum()
-        df['mr'] = util.median_rank(N, df['new_order_num'], 0.5)
-        # cdf
-        df['Ymr'] = jnp.log(jnp.log(1.0 / (1.0 - util.median_rank(N, df['new_order_num'], 0.5))))
-
-        slope, intercept, r, p, std = ss.linregress(df['X'], df['Ymr'])
-        self.lineq_param = [slope, intercept]
+        iks = jnp.log(self.est_data['time'].to_numpy())
+        igrek = jnp.log(jnp.log(1.0 / (1.0 - util.median_rank(self.N, self.est_data['new_order_num'], 0.5))))
+        slope, intercept, r, p, std = ss.linregress(iks, igrek)
+        #self.lineq_param = [slope, intercept]
         # assigning estimated parameters
         self.shape = slope
         self.scale = jnp.exp(-intercept / slope)
 
-        df['ub'] = (jnp.log(1.0 / (1.0 - util.median_rank(N, df['new_order_num'], self.CL))) ** (
+        self.est_data['ub'] = (jnp.log(1.0 / (1.0 - util.median_rank(self.N, self.est_data['new_order_num'], self.CL))) ** (
                 1.0 / self.shape) * self.scale)
-        df['lb'] = (jnp.log(1.0 / (1.0 - util.median_rank(N, df['new_order_num'], 1.0 - self.CL))) ** (
+        self.est_data['lb'] = (jnp.log(1.0 / (1.0 - util.median_rank(self.N, self.est_data['new_order_num'], 1.0 - self.CL))) ** (
                 1.0 / self.shape) * self.scale)
         self.r2 = r ** 2
-        self.est_data = df[['time', 'mr', 'lb', 'ub']]
+        self.est_data = self.est_data[['time', 'cdf', 'lb', 'ub']]
         self.method = Method.MRRCensored2p
         self.converged = True
         print(self.est_data)
@@ -220,7 +198,7 @@ class Weibull:
             self.censored = jnp.array(censored)
         else:
             self.censored = jnp.zeros(1)
-
+        self.__do_rank_regression()
         if method == Method.MLEComplete2p:
             self.__fitComplete2pMLE()
         elif method == Method.MLECensored2p:
@@ -232,6 +210,27 @@ class Weibull:
         elif method == Method.MRRCensored2p:
             self.__fitCensoredMRR()
         return self.converged
+
+    def __do_rank_regression(self):
+        f = jnp.hstack((jnp.atleast_2d(self.failures).T, jnp.zeros((self.failures.shape[0], 1))))
+        f = f[f[:, 0].argsort()]
+        f = jnp.hstack((f, jnp.reshape(jnp.arange(self.failures.shape[0]), (self.failures.shape[0], -1))))
+        # censored items will be having flag '1'
+        c = jnp.hstack((jnp.atleast_2d(self.censored).T, jnp.ones((self.censored.shape[0], 1))))
+        c = jnp.hstack((c, jnp.reshape(jnp.empty(self.censored.shape[0]), (self.censored.shape[0], -1))))
+        d = jnp.concatenate((c, f), axis=0)
+        d = d[d[:, 0].argsort()]
+        df = pd.DataFrame(data=d, columns=['time', 'is_cens', 'fo'])
+        #df['X'] = jnp.log(df['time'].to_numpy())
+        self.N = len(df.index)
+        df['new_increment'] = (self.N + 1 - df['fo']) / (self.N + 2 - df.index.values)
+        m = 1.0 - df['new_increment'].min()
+        df['new_increment'] = df['new_increment'] + m
+        df = df.drop(df[df['is_cens'] == 1].index)
+        df['new_order_num'] = df['new_increment'].cumsum()
+        df['cdf'] = util.median_rank(self.N, df['new_order_num'], 0.5)
+        # return df with time, is_cens flag,
+        self.est_data = df
 
     def printResults(self, out=None):
         if self.method in [Method.MLECensored2p, Method.MLEComplete2p]:
@@ -304,7 +303,7 @@ class Weibull:
         if self.method == Method.MRRCensored2p:
             method_text = 'MRR 2P'
             x = jnp.array(self.est_data['time'])
-            y = jnp.log(1.0 / (1.0 - jnp.array(self.est_data['mr'])))
+            y = jnp.log(1.0 / (1.0 - jnp.array(self.est_data['cdf'])))
             est_cdf = jnp.log(1.0 / (1.0 - self.cdf(x)))
             t_lb = self.est_data['lb']
             t_ub = self.est_data['ub']
@@ -312,8 +311,13 @@ class Weibull:
                         self.est_data[['time', 'lb', 'ub']].min().min() * 0.2)
             xmax = self.est_data[['time', 'lb', 'ub']].max().max() * 1.2
             xtics = 5 * jnp.around(jnp.arange(xmin, xmax, 30) / 5)  # round to nearest 5
+        elif self.method == Method.MLECensored2p:
+            method_text = 'MLE 2P'
+            x = jnp.array(self.est_data['time'])
+            y = jnp.log(1.0 / (1.0 - jnp.array(self.est_data['cdf'])))
+            #TODO нужно закончить прорисовку графика. посчитать аппер и лоуер бонды
 
-        fig = plt.figure(num=None, figsize=(8, 12), dpi=120, facecolor='w', edgecolor='k')
+        fig = plt.figure(num=None, figsize=(6, 9), dpi=80, facecolor='w', edgecolor='k')
         ax = fig.add_subplot(1, 1, 1)
         ax.set_xscale('log')
         ax.set_yscale('log')
@@ -324,6 +328,7 @@ class Weibull:
         ax.plot(t_ub, y, label='Upper bound') # upper bound
         ax.set_xlim([xmin,xmax])
         ax.set_xticks(xtics)
+        ax.set_xticklabels(xtics, rotation=45)
         ax.set_yticks([0.010050336, 0.051293294, 0.105360516, 0.223143551, 0.356674944, 0.510825624, 0.693147181, 0.916290732,
                        1.203972804, 1.609437912, 2.302585093, 4.605170186])
         ax.set_yticklabels([1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99])
