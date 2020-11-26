@@ -1,5 +1,7 @@
 
-
+'''
+published datasets
+'''
 class Cens2p_01:
     failures = [45, 46, 34, 45, 32, 24, 58, 79, 56, 63, 34, 50]
     censored = [23, 24, 57, 78, 76, 85, 51, 59]
@@ -21,7 +23,7 @@ class Cens2p_03:
     failures = [54, 187, 216, 240, 244, 335, 361, 373, 375, 386]
     censored = [500, 500, 500, 500, 500, 500, 500, 500, 500, 500]
     shape = 1.7207
-    scale = 4900.1
+    scale = 606.5280
     source = 'https://www.itl.nist.gov/div898/handbook/apr/section4/apr413.htm'
 
 class Cens2p_04:
