@@ -326,7 +326,7 @@ class Weibull:
         ax.set_xticks(xtics)
         ax.set_yticks([0.010050336, 0.051293294, 0.105360516, 0.223143551, 0.356674944, 0.510825624, 0.693147181, 0.916290732,
                        1.203972804, 1.609437912, 2.302585093, 4.605170186])
-        ax.set_yticklabels([1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99])
+        ax.set_yticklabels(['1%', '5%', '10%', '20%', '30%', '40%', '50%', '60%', '70%', '80%', '90%', '99%'])
         ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
         ax.grid(True, which="both")
         ax.set_xlabel('Sample data (time/cycle)')
