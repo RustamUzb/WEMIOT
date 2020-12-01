@@ -2,8 +2,8 @@ import jax.numpy as jnp
 from jax import jacfwd, jacrev
 from jax.numpy import linalg
 import scipy.stats as ss
-import matplotlib.pyplot as plt
 import matplotlib
+import matplotlib.pyplot as plt
 import pandas as pd
 from tabulate import tabulate
 import datetime
@@ -18,14 +18,16 @@ class Weibull:
 
     def __init__(self, *args, **kwargs):
         self.N = 0 # total sample size
-        self.est_data = None
+        self.est_data = None # df to save failure time and cdf
         self.r2 = None
 
         self.failures = None
         self.censored = None
+
         self.shape = None
         self.scale = None
         self.loc = 0.0
+
         self.CL = None
         self.variance = None
         self.beta_eta_covar = None
@@ -129,7 +131,7 @@ class Weibull:
         self.est_data = self.est_data[['time', 'cdf', 'lb', 'ub']]
         self.method = Method.MRRCensored2p
         self.converged = True
-        print(self.est_data)
+        #print(self.est_data)
 
     def __logLikelihood2pComp(self, x):
         '''
@@ -202,7 +204,6 @@ class Weibull:
         d = jnp.concatenate((c, f), axis=0)
         d = d[d[:, 0].argsort()]
         df = pd.DataFrame(data=d, columns=['time', 'is_cens', 'fo'])
-        #df['X'] = jnp.log(df['time'].to_numpy())
         self.N = len(df.index)
         df['new_increment'] = (self.N + 1 - df['fo']) / (self.N + 2 - df.index.values)
         m = 1.0 - df['new_increment'].min()
@@ -210,7 +211,6 @@ class Weibull:
         df = df.drop(df[df['is_cens'] == 1].index)
         df['new_order_num'] = df['new_increment'].cumsum()
         df['cdf'] = util.median_rank(self.N, df['new_order_num'], 0.5)
-        # return df with time, is_cens flag,
         self.est_data = df
 
     def printResults(self, out=None):
@@ -275,11 +275,6 @@ class Weibull:
             elif out == 'console':
                 print(tabulate(prdf, tablefmt='grid', showindex=False))
 
-    def printEstData(self, to_file=False):
-        if not to_file:
-            with pd.option_context('display.max_rows', None, 'display.max_columns', None):
-                print(self.est_data)
-
     def showPlot(self):
         if self.method == Method.MRRCensored2p:
             xmin = self.est_data[['time', 'lb', 'ub']].min().min() - (
@@ -318,9 +313,7 @@ class Weibull:
             t_tub = self.bLiveCL(1.0 - self.cdf(x), Bound.TSUB)
             xmin = self.bLive(0.01)
             xmax = self.bLive(0.99)
-            print(xmin, xmax)
             xtics = 5 * jnp.around(jnp.arange(xmin, xmax, (xmax-xmin)/10) / 5)   # round to nearest 5
-            print(xtics)
 
         fig = plt.figure(num=None, figsize=(6, 9), dpi=80, facecolor='w', edgecolor='k')
         ax = fig.add_subplot(1, 1, 1)
