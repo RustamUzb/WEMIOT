@@ -27,13 +27,8 @@ class Weibull:
         self.scale = None
         self.loc = 0.0
         self.CL = None
-        # one-sided and two-sided bound for parameters (fisher matrix)
-        # [shape, scale, loc]
-        self.TSUBpar = [0, 0, 0]
-        self.TSLBpar = [0, 0, 0]
-        self.OSUBpar = [0, 0, 0]
-        self.OSLBpar = [0, 0, 0]
-
+        self.variance = None
+        self.beta_eta_covar = None
         self.method = ''
         self.converged = False
         f = os.path.join(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'conf'), 'config.ini')
@@ -68,15 +63,8 @@ class Weibull:
             self.method = '2pComplete'
 
             # Fisher Matrix confidence bound
-            variance = [abs(hess[0][0]), abs(hess[1][1])]
-            ZO = -ss.norm.ppf(1 - self.CL)
-            ZT = -ss.norm.ppf((1 - self.CL) / 2)
-
-            self.TSUBpar = parameters * jnp.exp((ZT * jnp.sqrt(jnp.array(variance))) / parameters)
-            self.TSLBpar = parameters * jnp.exp((-ZT * jnp.sqrt(jnp.array(variance))) / parameters)
-
-            self.OSUBpar = parameters * jnp.exp((ZO * jnp.sqrt(jnp.array(variance))) / parameters)
-            self.OSLBpar = parameters * jnp.exp((-ZO * jnp.sqrt(jnp.array(variance))) / parameters)
+            self.variance = [abs(hess[0][0]), abs(hess[1][1])]
+            self.beta_eta_covar = [abs(hess[1][0])]
 
         else:
             # if more than 200 epoch it would be considered that fit is not converged
@@ -108,15 +96,8 @@ class Weibull:
             self.shape = parameters[0]
             self.scale = parameters[1]
             self.method = Method.MLECensored2p
-
-            # Fisher Matrix confidence bound
-            variance = [abs(hess[0][0]), abs(hess[1][1])]
-            ZO = -ss.norm.ppf(1 - self.CL)
-            ZT = -ss.norm.ppf((1 - self.CL) / 2)
-            self.TSUBpar = parameters * jnp.exp((ZT * jnp.sqrt(jnp.array(variance))) / parameters)
-            self.TSLBpar = parameters * jnp.exp((-ZT * jnp.sqrt(jnp.array(variance))) / parameters)
-            self.OSUBpar = parameters * jnp.exp((ZO * jnp.sqrt(jnp.array(variance))) / parameters)
-            self.OSLBpar = parameters * jnp.exp((-ZO * jnp.sqrt(jnp.array(variance))) / parameters)
+            self.variance = [abs(hess[0][0]), abs(hess[1][1])]
+            self.beta_eta_covar = [abs(hess[1][0])]
 
         else:
             # if more than 200 epoch it would be considered that fit is not converged
@@ -135,7 +116,7 @@ class Weibull:
         iks = jnp.log(self.est_data['time'].to_numpy())
         igrek = jnp.log(jnp.log(1.0 / (1.0 - util.median_rank(self.N, self.est_data['new_order_num'], 0.5))))
         slope, intercept, r, p, std = ss.linregress(iks, igrek)
-        #self.lineq_param = [slope, intercept]
+
         # assigning estimated parameters
         self.shape = slope
         self.scale = jnp.exp(-intercept / slope)
@@ -243,10 +224,10 @@ class Weibull:
                 {'a': '', 'b': 'Censored:', 'c': str(self.censored.size), 'd': '', 'e': ''})
             prdf.loc[3] = pd.Series({'a': '', 'b': 'Conf. In:', 'c': str(self.CL), 'd': '', 'e': ''})
             prdf.loc[4] = pd.Series({'a': 'OUTPUT:', 'b': '', 'c': 'Est:', 'd': 'LB', 'e': 'UB'})
-            prdf.loc[5] = pd.Series({'a': '', 'b': 'Shape', 'c': str(round(self.shape, 4)),
-                                     'd': str(round(self.OSLBpar[0], 4)), 'e': str(round(self.OSUBpar[0], 4))})
-            prdf.loc[6] = pd.Series({'a': '', 'b': 'Scale', 'c': str(round(self.scale, 4)),
-                                     'd': str(round(self.OSLBpar[1], 4)), 'e': str(round(self.OSUBpar[1], 4))})
+            #prdf.loc[5] = pd.Series({'a': '', 'b': 'Shape', 'c': str(round(self.shape, 4)),
+            #                         'd': str(round(self.OSLBpar[0], 4)), 'e': str(round(self.OSUBpar[0], 4))})
+           # prdf.loc[6] = pd.Series({'a': '', 'b': 'Scale', 'c': str(round(self.scale, 4)),
+            #                         'd': str(round(self.OSLBpar[1], 4)), 'e': str(round(self.OSUBpar[1], 4))})
             prdf.loc[7] = pd.Series({'a': '', 'b': 'Loc:', 'c': 0.0,
                                      'd': 0.0, 'e': 0.0})
             if out == None:
@@ -301,34 +282,63 @@ class Weibull:
 
     def showPlot(self):
         if self.method == Method.MRRCensored2p:
-            method_text = 'MRR 2P'
-            x = jnp.array(self.est_data['time'])
-            y = jnp.log(1.0 / (1.0 - jnp.array(self.est_data['cdf'])))
-            est_cdf = jnp.log(1.0 / (1.0 - self.cdf(x)))
-            t_lb = self.est_data['lb']
-            t_ub = self.est_data['ub']
             xmin = self.est_data[['time', 'lb', 'ub']].min().min() - (
                         self.est_data[['time', 'lb', 'ub']].min().min() * 0.2)
             xmax = self.est_data[['time', 'lb', 'ub']].max().max() * 1.2
-            xtics = 5 * jnp.around(jnp.arange(xmin, xmax, 30) / 5)  # round to nearest 5
+            method_text = 'MRR 2P'
+            conf_test = 'MR'
+
+            xx = jnp.array(self.est_data['time']) #failures
+            yy = jnp.log(1.0 / (1.0 - jnp.array(self.est_data['cdf'])))
+
+            x = jnp.arange (xmin, xmax, (xmax-xmin)/200 )
+            est_cdf = jnp.log(1.0 / (1.0 - self.cdf(x)))
+
+            y = yy
+            t_lb = self.est_data['lb']
+            t_ub = self.est_data['ub']
+            xtics = 5 * jnp.around(jnp.arange(xmin, xmax, (xmax - xmin) / 10) / 5)  # round to nearest 5
+
         elif self.method == Method.MLECensored2p:
             method_text = 'MLE 2P'
-            x = jnp.array(self.est_data['time'])
-            y = jnp.log(1.0 / (1.0 - jnp.array(self.est_data['cdf'])))
-            #TODO нужно закончить прорисовку графика. посчитать аппер и лоуер бонды
+            conf_test = 'FM'
+            xmin = self.bLive(0.01)
+            xmax = self.bLive(0.99)
+
+            xx = jnp.array(self.est_data['time'])
+            yy = jnp.log(1.0 / (1.0 - jnp.array(self.est_data['cdf'])))
+
+            x = jnp.arange(xmin, xmax, (xmax - xmin) / 200)
+            est_cdf = jnp.log(1.0 / (1.0 - self.cdf(x)))
+
+            y = est_cdf
+            t_lb = self.bLiveCL(1.0 - self.cdf(x), Bound.OSLB)
+            t_ub = self.bLiveCL(1.0 - self.cdf(x), Bound.OSUB)
+            t_tlb = self.bLiveCL(1.0 - self.cdf(x), Bound.TSLB)
+            t_tub = self.bLiveCL(1.0 - self.cdf(x), Bound.TSUB)
+            xmin = self.bLive(0.01)
+            xmax = self.bLive(0.99)
+            print(xmin, xmax)
+            xtics = 5 * jnp.around(jnp.arange(xmin, xmax, (xmax-xmin)/10) / 5)   # round to nearest 5
+            print(xtics)
 
         fig = plt.figure(num=None, figsize=(6, 9), dpi=80, facecolor='w', edgecolor='k')
         ax = fig.add_subplot(1, 1, 1)
         ax.set_xscale('log')
         ax.set_yscale('log')
         fig.canvas.draw()
-        ax.plot(x, y, 'rX', label='Failures') #failures
+        ax.plot(xx, yy, 'rX', label='Failures (MMR)') #failures
         ax.plot(x, est_cdf, label='Reference line') #estimated
-        ax.plot(t_lb, y, label='Lower bound') # lower bound
-        ax.plot(t_ub, y, label='Upper bound') # upper bound
-        ax.set_xlim([xmin,xmax])
+        ax.plot(t_lb, y, label='Lower bound - ' + str(round(1.0 - self.CL, 3))) # lower bound
+        ax.plot(t_ub, y, label='Upper bound - ' + str(round(1.0 - self.CL, 3))) # upper bound
+        if self.method == Method.MLECensored2p:
+            # only for MLE
+            ax.fill_betweenx(y, t_tlb, t_tub, facecolor='tan', alpha=0.3 ,label='2 side bound 2 x '+
+                                                                                str(round((1.0 - self.CL)/2, 3)))
         ax.set_xticks(xtics)
+        ax.set_xlabel(xtics)
         ax.set_xticklabels(xtics, rotation=45)
+
         ax.set_yticks([0.010050336, 0.051293294, 0.105360516, 0.223143551, 0.356674944, 0.510825624, 0.693147181, 0.916290732,
                        1.203972804, 1.609437912, 2.302585093, 4.605170186])
         ax.set_yticklabels(['1%', '5%', '10%', '20%', '30%', '40%', '50%', '60%', '70%', '80%', '90%', '99%'])
@@ -337,127 +347,122 @@ class Weibull:
         ax.set_xlabel('Sample data (time/cycle)')
         ax.set_ylabel('Weibull probability')
         ax.set_title("Weibull probability plot "
-                     "\n fit = " + method_text + ", Failures = " + str(self.failures.size) + ", Censored = " +
-                     str(self.censored.size) + "\n Shape = " + str(round(self.shape, 2)) + " ; Scale= " +
-                     str(round(self.scale, 2)) + " ; Location = " + str(round(self.loc, 2)))
-        plt.legend()
+                     "\n fit = " + method_text + ", CI =" + conf_test + ", Failures = " + str(self.failures.size) +
+                     ", Censored = " + str(self.censored.size) + "\n Est:  Shape = " + str(round(self.shape, 2)) +
+                     " ; Scale= " + str(round(self.scale, 2)) + " ; Location = " + str(round(self.loc, 2)))
+        plt.legend(loc='upper left')
         plt.show()
 
-    def pdf(self, x, bound=None):
+    def pdf(self, t):
+        return ss.weibull_min.pdf(t, c=self.shape, loc=self.loc, scale=self.scale)
+
+    def cdf(self, t):
+        return ss.weibull_min.cdf(t, c=self.shape, loc=self.loc, scale=self.scale)
+
+    def reliability(self, t):
+        return ss.weibull_min.sf(t, c=self.shape, loc=self.loc, scale=self.scale)
+
+    def median(self):
+        return ss.weibull_min.median(c=self.shape, loc=self.loc, scale=self.scale)
+
+    def mean(self):
+        return ss.weibull_min.mean(c=self.shape, loc=self.loc, scale=self.scale)
+
+    def var(self):
+        return ss.weibull_min.var(c=self.shape, loc=self.loc, scale=self.scale)
+
+    def std(self):
+        return ss.weibull_min.std(c=self.shape, loc=self.loc, scale=self.scale)
+
+    def hf(self, t):
+        '''
+        https://en.wikipedia.org/wiki/Weibull_distribution
+        :param t:
+        :return: failure rate at time t
+        '''
+        return (self.shape / self.scale) * ((t - self.loc) / self.scale) ** (self.shape - 1.0)
+
+    def bLive(self, R, bound=None):
         if bound is None:
-            v = ss.weibull_min.pdf(x, c=self.shape, loc=self.loc, scale=self.scale)
-        elif bound == Bound.OSLB:
-            v = ss.weibull_min.pdf(x, c=self.shapeOSLB, loc=self.locOSLB, scale=self.scaleOSLB)
-        elif bound == Bound.TSLB:
-            v = ss.weibull_min.pdf(x, c=self.shapeTSLB, loc=self.locTSLB, scale=self.scale)
+            v = ss.weibull_min.ppf(R, self.shape, scale=self.scale, loc=self.loc)
+        return v
+
+    def bLiveCL(self, R, bound):
+        '''
+        https://www.weibull.com/hotwire/issue17/relbasics17.htm
+        :param R:
+        :param bound:
+        :return:
+        '''
+
+        if bound == Bound.OSLB:
+            ZO = -ss.norm.ppf(1 - self.CL)
+            ln_t = 1 / self.shape * jnp.log(- jnp.log(R)) + jnp.log(self.scale)
+            var_ln_t = 1.0 / (self.shape ** 4) * (jnp.log(-jnp.log(R))**2) * self.variance[0] \
+                    + 1.0 / (self.scale ** 2) * self.variance[1] + 2 * (- 1.0 / (self.shape**2)) \
+                    * (jnp.log(- jnp.log(R)) / self.scale) * self.beta_eta_covar[0]
+            ans = jnp.exp(ln_t - ZO * jnp.sqrt(var_ln_t)) + self.loc
         elif bound == Bound.OSUB:
-            v = ss.weibull_min.pdf(x, c=self.shapeOSUB, loc=self.locOSUB, scale=self.scaleOSUB)
+            ZO = -ss.norm.ppf(1 - self.CL)
+            ln_t = 1 / self.shape * jnp.log(- jnp.log(R)) + jnp.log(self.scale)
+            var_ln_t = 1.0 / (self.shape ** 4) * (jnp.log(-jnp.log(R)) ** 2) * self.variance[0] \
+                       + 1.0 / (self.scale ** 2) * self.variance[1] + 2 * (- 1.0 / (self.shape ** 2)) \
+                       * (jnp.log(- jnp.log(R)) / self.scale) * self.beta_eta_covar[0]
+            ans = jnp.exp(ln_t + ZO * jnp.sqrt(var_ln_t)) + self.loc
+        elif bound == Bound.TSLB:
+            ZT = -ss.norm.ppf((1 - self.CL) / 2)
+            ln_t = 1 / self.shape * jnp.log(- jnp.log(R)) + jnp.log(self.scale)
+            var_ln_t = 1.0 / (self.shape ** 4) * (jnp.log(-jnp.log(R)) ** 2) * self.variance[0] \
+                       + 1.0 / (self.scale ** 2) * self.variance[1] + 2 * (- 1.0 / (self.shape ** 2)) \
+                       * (jnp.log(- jnp.log(R)) / self.scale) * self.beta_eta_covar[0]
+            ans = jnp.exp(ln_t - ZT * jnp.sqrt(var_ln_t)) + self.loc
         elif bound == Bound.TSUB:
-            v = ss.weibull_min.pdf(x, c=self.shapeTSUB, loc=self.locTSUB, scale=self.scale)
-        return v
+            ZT = -ss.norm.ppf((1 - self.CL) / 2)
+            ln_t = 1 / self.shape * jnp.log(- jnp.log(R)) + jnp.log(self.scale)
+            var_ln_t = 1.0 / (self.shape ** 4) * (jnp.log(-jnp.log(R)) ** 2) * self.variance[0] \
+                       + 1.0 / (self.scale ** 2) * self.variance[1] + 2 * (- 1.0 / (self.shape ** 2)) \
+                       * (jnp.log(- jnp.log(R)) / self.scale) * self.beta_eta_covar[0]
+            ans = jnp.exp(ln_t + ZT * jnp.sqrt(var_ln_t)) + self.loc
 
-    def cdf(self, x, bound=None):
-        if bound is None:
-            v = ss.weibull_min.cdf(x, c=self.shape, loc=self.loc, scale=self.scale)
-        elif bound == 'OSLB':
-            v = ss.weibull_min.cdf(x, c=self.shapeOSLB, loc=self.locOSLB, scale=self.scaleOSLB)
-        elif bound == 'TSLB':
-            v = ss.weibull_min.cdf(x, c=self.shapeTSLB, loc=self.locTSLB, scale=self.scaleTSLB)
-        elif bound == 'OSUB':
-            v = ss.weibull_min.cdf(x, c=self.shapeOSUB, loc=self.locOSUB, scale=self.scaleOSUB)
-        elif bound == 'TSUB':
-            v = ss.weibull_min.cdf(x, c=self.shapeTSUB, loc=self.locTSUB, scale=self.scaleTSUB)
-        return v
+        return ans
 
-    def sf(self, x, bound=None):
-        if bound is None:
-            v = ss.weibull_min.sf(x, c=self.shape, loc=self.loc, scale=self.scale)
-        elif bound == 'OSLB':
-            v = ss.weibull_min.sf(x, c=self.shapeOSLB, loc=self.locOSLB, scale=self.scaleOSLB)
-        elif bound == 'TSLB':
-            v = ss.weibull_min.sf(x, c=self.shapeTSLB, loc=self.locTSLB, scale=self.scaleTSLB)
-        elif bound == 'OSUB':
-            v = ss.weibull_min.sf(x, c=self.shapeOSUB, loc=self.locOSUB, scale=self.scaleOSUB)
-        elif bound == 'TSUB':
-            v = ss.weibull_min.sf(x, c=self.shapeTSUB, loc=self.locTSUB, scale=self.scaleTSUB)
-        return v
+    def reliabilityCL(self, t, bound):
+        '''
+        https://www.weibull.com/hotwire/issue17/relbasics17.htm
+        :param t:
+        :param bound:
+        :return:
+        '''
+        if bound == Bound.OSLB:
+            ZO = -ss.norm.ppf(1 - self.CL)
+            r = self.shape * (jnp.log(t + self.loc) - jnp.log(self.scale))
+            var_r = (((r**2) / (self.shape **2)) * self.variance[0]) + ((self.shape**2)/ (self.scale**2)) \
+                * self.variance[1] - ((2*r)/self.scale) * self.beta_eta_covar[0]
+            ans =  jnp.exp(-jnp.exp(r - ZO * jnp.sqrt(var_r)))
+        elif bound == Bound.OSUB:
+            ZO = -ss.norm.ppf(1 - self.CL)
+            r = self.shape * (jnp.log(t + self.loc) - jnp.log(self.scale))
+            var_r = (((r ** 2) / (self.shape ** 2)) * self.variance[0]) + ((self.shape ** 2) / (self.scale ** 2)) \
+                    * self.variance[1] - ((2 * r) / self.scale) * self.beta_eta_covar[0]
+            ans = jnp.exp(-jnp.exp(r + ZO * jnp.sqrt(var_r)))
+        elif bound == Bound.TSLB:
+            ZT = -ss.norm.ppf((1 - self.CL) / 2)
+            r = self.shape * (jnp.log(t + self.loc) - jnp.log(self.scale))
+            var_r = (((r ** 2) / (self.shape ** 2)) * self.variance[0]) + ((self.shape ** 2) / (self.scale ** 2)) \
+                    * self.variance[1] - ((2 * r) / self.scale) * self.beta_eta_covar[0]
+            ans = jnp.exp(-jnp.exp(r - ZT * jnp.sqrt(var_r)))
+        elif bound == Bound.TSUB:
+            ZT = -ss.norm.ppf((1 - self.CL) / 2)
+            r = self.shape * (jnp.log(t + self.loc) - jnp.log(self.scale))
+            var_r = (((r ** 2) / (self.shape ** 2)) * self.variance[0]) + ((self.shape ** 2) / (self.scale ** 2)) \
+                    * self.variance[1] - ((2 * r) / self.scale) * self.beta_eta_covar[0]
+            ans = jnp.exp(-jnp.exp(r + ZT * jnp.sqrt(var_r)))
+        return ans
 
-    def median(self, bound=None):
-        if bound is None:
-            v = ss.weibull_min.median(c=self.shape, loc=self.loc, scale=self.scale)
-        elif bound == 'OSLB':
-            v = ss.weibull_min.median(c=self.shapeOSLB, loc=self.locOSLB, scale=self.scaleOSLB)
-        elif bound == 'TSLB':
-            v = ss.weibull_min.median(c=self.shapeTSLB, loc=self.locTSLB, scale=self.scaleTSLB)
-        elif bound == 'OSUB':
-            v = ss.weibull_min.median(c=self.shapeOSUB, loc=self.locOSUB, scale=self.scaleOSUB)
-        elif bound == 'TSUB':
-            v = ss.weibull_min.median(c=self.shapeTSUB, loc=self.locTSUB, scale=self.scaleTSUB)
-        return v
-
-    def mean(self, bound=None):
-        if bound is None:
-            v = ss.weibull_min.mean(c=self.shape, loc=self.loc, scale=self.scale)
-        elif bound == 'OSLB':
-            v = ss.weibull_min.mean(c=self.shapeOSLB, loc=self.locOSLB, scale=self.scaleOSLB)
-        elif bound == 'TSLB':
-            v = ss.weibull_min.mean(c=self.shapeTSLB, loc=self.locTSLB, scale=self.scaleTSLB)
-        elif bound == 'OSUB':
-            v = ss.weibull_min.mean(c=self.shapeOSUB, loc=self.locOSUB, scale=self.scaleOSUB)
-        elif bound == 'TSUB':
-            v = ss.weibull_min.mean(c=self.shapeTSUB, loc=self.locTSUB, scale=self.scaleTSUB)
-        return v
-
-    def var(self, bound=None):
-        if bound is None:
-            v = ss.weibull_min.var(c=self.shape, loc=self.loc, scale=self.scale)
-        elif bound == 'OSLB':
-            v = ss.weibull_min.var(c=self.shapeOSLB, loc=self.locOSLB, scale=self.scaleOSLB)
-        elif bound == 'TSLB':
-            v = ss.weibull_min.var(c=self.shapeTSLB, loc=self.locTSLB, scale=self.scaleTSLB)
-        elif bound == 'OSUB':
-            v = ss.weibull_min.var(c=self.shapeOSUB, loc=self.locOSUB, scale=self.scaleOSUB)
-        elif bound == 'TSUB':
-            v = ss.weibull_min.var(c=self.shapeTSUB, loc=self.locTSUB, scale=self.scaleTSUB)
-        return v
-
-    def std(self, bound=None):
-        if bound is None:
-            v = ss.weibull_min.std(c=self.shape, loc=self.loc, scale=self.scale)
-        elif bound == 'OSLB':
-            v = ss.weibull_min.std(c=self.shapeOSLB, loc=self.locOSLB, scale=self.scaleOSLB)
-        elif bound == 'TSLB':
-            v = ss.weibull_min.std(c=self.shapeTSLB, loc=self.locTSLB, scale=self.scaleTSLB)
-        elif bound == 'OSUB':
-            v = ss.weibull_min.std(c=self.shapeOSUB, loc=self.locOSUB, scale=self.scaleOSUB)
-        elif bound == 'TSUB':
-            v = ss.weibull_min.std(c=self.shapeTSUB, loc=self.locTSUB, scale=self.scaleTSUB)
-        return v
-
-    # hazard function (failure rate)
-    def hf(self, x, bound=None):
-
-        if bound is None:
-            v = (self.shape / self.scale) * ((x - self.loc) / self.scale) ** (self.shape - 1.0)
-        elif bound == 'OSLB':
-            v = (self.shapeOSLB / self.scaleOSLB) * (((x - self.locOSLB) / self.scaleOSLB) ** (self.shapeOSLB - 1.0))
-        elif bound == 'TSLB':
-            v = (self.shapeTSLB / self.scaleTSLB) * (((x - self.locTSLB) / self.scaleTSLB) ** (self.shapeTSLB - 1.0))
-        elif bound == 'OSUB':
-            v = (self.shapeOSUB / self.scaleOSUB) * (((x - self.locOSUB) / self.scaleOSUB) ** (self.shapeOSUB - 1.0))
-        elif bound == 'TSUB':
-            v = (self.shapeTSUB / self.scaleTSUB) * (((x - self.locTSUB) / self.scaleTSUB) ** (self.shapeTSUB - 1.0))
-        return v
-
-    def bLive(self, x, CB=None):
-        # TODO linear interpolation if Method.MRR
-        return None
-
-    def chf(self, bound=None):
+    def chf(self, t):
         '''
         Cumulative hazard function
         :param bound:
         :return:
         '''
-        # TODO (find valid refference for calculation)
-        pass
+        return ((t - self.loc) / self.scale)**self.shape
