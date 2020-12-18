@@ -63,10 +63,10 @@ class Comp2p_01:
 3 parameter weibull distributions
 '''
 class Cens3p_01:
-    failures = [105, 125, 128, 143, 148, 152, 197]
-    censored = [102, 112, 116, 121, 134, 137, 149, 162, 165]
-    shape = 2.1
-    scale = 90
-    loc = 80
-    source = 'from Manchester Univerity M04 course (tab 4.3)'
+    failures = [46, 64, 83, 105, 123, 150]
+    censored = [200, 200, 200, 200]
+    shape = 1.79418
+    scale = 144.799390
+    loc = 30.92
+    source = 'https://www.reliawiki.com/index.php/3P-Weibull_Rank_Regression'
 

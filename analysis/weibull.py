@@ -1,6 +1,9 @@
-import jax.numpy as jnp
 from jax import jacfwd, jacrev
 from jax.numpy import linalg
+import jax.numpy as jnp
+
+import numpy as np
+
 import scipy.stats as ss
 import matplotlib
 import matplotlib.pyplot as plt
@@ -36,6 +39,7 @@ class Weibull:
         f = os.path.join(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'conf'), 'config.ini')
         self.config = configparser.ConfigParser()
         self.config.read(f)
+
 
     def __fitComplete2pMLE(self):
         # initial guess:
@@ -93,6 +97,7 @@ class Weibull:
             q = 1 / (1 + jnp.sqrt(abs(grads / 8)))  # Q is a coefficient to reduce gradient ascent step for high delta
             parameters -= q * hess @ grads  # Newton-Raphson maximisation
             total = abs(grads[0]) + abs(grads[1])
+
         if epoch < 200:
             self.converged = True
             self.shape = parameters[0]
@@ -107,6 +112,7 @@ class Weibull:
             self.shape = None
             self.scale = None
             self.method = Method.MLECensored2p
+            print('no')
 
     def __fitCensoredMRR(self):
         '''
@@ -192,6 +198,9 @@ class Weibull:
                 print('Censored data must be provided')
         elif method == Method.MRRCensored2p:
             self.__fitCensoredMRR()
+        else:
+            # TODO raise error
+            print('choose proper method')
         return self.converged
 
     def __do_rank_regression(self):
@@ -283,7 +292,7 @@ class Weibull:
             method_text = 'MRR 2P'
             conf_test = 'MR'
 
-            xx = jnp.array(self.est_data['time']) #failures
+            xx = jnp.array(self.est_data['time'] - self.loc) #failures
             yy = jnp.log(1.0 / (1.0 - jnp.array(self.est_data['cdf'])))
 
             x = jnp.arange (xmin, xmax, (xmax-xmin)/200 )
@@ -300,7 +309,7 @@ class Weibull:
             xmin = self.bLive(0.01)
             xmax = self.bLive(0.99)
 
-            xx = jnp.array(self.est_data['time'])
+            xx = jnp.array(self.est_data['time'] - self.loc)
             yy = jnp.log(1.0 / (1.0 - jnp.array(self.est_data['cdf'])))
 
             x = jnp.arange(xmin, xmax, (xmax - xmin) / 200)

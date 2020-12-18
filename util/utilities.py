@@ -27,6 +27,7 @@ class Method(Enum):
     MLEComplete2p = 2
     MLECensored2p = 3
     MRRCensored2p = 4
+    MLECensored3p = 5
 
 
 class Bound(Enum):
