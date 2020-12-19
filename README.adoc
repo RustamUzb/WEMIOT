@@ -2,17 +2,24 @@
 
 * optimisation models (TODO)
 * weibull estimation
-** 2p complete rank regression (done)
-*** some text
-** 2p complete MLE (done)
-** 2p censored rank regression (done)
-** 2p censored MEL (done)
-** 3p complete rank regression (TODO)
-** 3p censored rank regression (TODO)
-** 3p MLE (TODO)
+** 2p complete
+*** rank regression (done)
+**** graph (done)
+**** confidence interval (median rank) (done)
+*** MLE
+**** graph (done)
+**** confidence interval (hessian, 1 and 2 side)
+** 2p censored
+*** rank regression (done)
+**** graph (done)
+**** confidence interval (median rank) (done)
+*** MLE
+**** graph (done)
+**** confidence interval (hessian, 1 and 2 side)
+** 3p complete
+*** rank regression. (todo)
+*** MLE (todo)
 
-Weibull Enabled Maintenance and Inspection Optimisation Tool (WEMIOT) is the ML driven decision analysis tool for selection
-maintenance policy based on data from a CMMS. 
 
 == Description
 
