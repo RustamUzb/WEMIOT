@@ -125,9 +125,19 @@ class Weibull:
         igrek = jnp.log(jnp.log(1.0 / (1.0 - util.median_rank(self.N, self.est_data['new_order_num'], 0.5))))
 
         if self.method == Method.MRRCensored2p:
-            slope, intercept, r, p, std = self.__lineregress(iks, igrek)
+            slope, intercept, r, _, _ = self.__lineregress(iks, igrek)
         elif self.method == Method.MRRCensored3p:
-            pass
+            locs = jnp.linspace(0, jnp.amin(iks), 10)
+            arr = np.empty((0, 4), float)
+            for l in locs:
+                l_iks = iks - l
+                l_slope, l_intercept, l_r, _ , _ = self.__lineregress(iks, igrek)
+                arr = np.append(arr, np.array([[l, l_slope, l_intercept, l_r]]), axis=0)
+            g = arr[np.argmax(arr[:, 3])]
+            slope = g[1]
+            intercept = g[2]
+            r = g[3]
+            self.loc = g[0]
 
         # assigning estimated parameters
         self.shape = slope
@@ -209,6 +219,8 @@ class Weibull:
                 # TODO raise error
                 print('Censored data must be provided')
         elif method == Method.MRRCensored2p:
+            self.__fitCensoredMRR()
+        elif method == Method.MRRCensored3p:
             self.__fitCensoredMRR()
         else:
             # TODO raise error
