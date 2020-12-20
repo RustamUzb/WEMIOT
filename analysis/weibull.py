@@ -123,7 +123,11 @@ class Weibull:
         '''
         iks = jnp.log(self.est_data['time'].to_numpy())
         igrek = jnp.log(jnp.log(1.0 / (1.0 - util.median_rank(self.N, self.est_data['new_order_num'], 0.5))))
-        slope, intercept, r, p, std = ss.linregress(iks, igrek)
+
+        if self.method == Method.MRRCensored2p:
+            slope, intercept, r, p, std = self.__lineregress(iks, igrek)
+        elif self.method == Method.MRRCensored3p:
+            pass
 
         # assigning estimated parameters
         self.shape = slope
@@ -138,6 +142,10 @@ class Weibull:
         self.method = Method.MRRCensored2p
         self.converged = True
         #print(self.est_data)
+
+    def __lineregress(self, x_values, y_values):
+        slope, intercept, r, p, std = ss.linregress(x_values, y_values)
+        return slope, intercept, r, p, std
 
     def __logLikelihood2pComp(self, x):
         '''
@@ -183,12 +191,16 @@ class Weibull:
         '''
         self.CL = CL
         self.failures = jnp.array(failures)
+        self.method = method
         if censored is not None:
             self.censored = jnp.array(censored)
         else:
             self.censored = jnp.zeros(1)
         self.__do_rank_regression()
-        if method == Method.MLEComplete2p:
+        if method == Method.AUTO:
+            # TODO automatically define method (2 parameters only)
+            pass
+        elif method == Method.MLEComplete2p:
             self.__fitComplete2pMLE()
         elif method == Method.MLECensored2p:
             if censored is not None:

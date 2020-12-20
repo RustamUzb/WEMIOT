@@ -1,23 +1,26 @@
 == Development progress
 
 * optimisation models (TODO)
+** not started
 * weibull estimation
 ** 2p complete
-*** rank regression (done)
-**** graph (done)
-**** confidence interval (median rank) (done)
-*** MLE
-**** graph (done)
-**** confidence interval (hessian, 1 and 2 side)
-** 2p censored
-*** rank regression (done)
-**** graph (done)
-**** confidence interval (median rank) (done)
-*** MLE
-**** graph (done)
-**** confidence interval (hessian, 1 and 2 side)
+*** [.line-through]#rank regression (NA)#
+*** [.line-through]#MLE#
+**** [.line-through]#graph#
+**** [.line-through]#confidence interval (hessian, 1 and 2 side)#
+** [.line-through]#2p censored#
+*** [.line-through]#rank regression#
+**** [.line-through]#graph#
+**** [.line-through]#confidence interval (median rank)#
+*** [.line-through]#MLE#
+**** [.line-through]#graph#
+**** [.line-through]#confidence interval (hessian, 1 and 2 side)#
+** auto selection of fit method
+
+//TODO
 ** 3p complete
-*** rank regression. (todo)
+*** rank regression. the same 2p fit for 10 different locations between 0 and min(failure_set). correlation coifecent
+will be compared. location with better correlation coificient will be used.
 *** MLE (todo)
 
 
@@ -28,7 +31,7 @@ a maintenance policy is a long-standing problem. In many organisations failure a
 used at all. This tool will automatically choose most suitable maintenance policy by solving optimisation problems.
 
 === Optimization problems
-
+//TODO
 * Component replacement interval
 * Inspection interval
 * Capital equipment replacement interval
