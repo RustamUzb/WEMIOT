@@ -28,7 +28,7 @@ class Method(Enum):
     MLECensored2p = 3
     MRRCensored2p = 4
     MLECensored3p = 5
-
+    MRRCensored3p = 6
 
 class Bound(Enum):
     OSLB = 0
