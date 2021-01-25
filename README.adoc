@@ -19,8 +19,7 @@
 
 //TODO
 ** 3p complete
-*** rank regression. the same 2p fit for 10 different locations between 0 and min(failure_set). correlation coifecent
-will be compared. location with better correlation coificient will be used.
+*** [.line-through]#rank regression#.
 *** MLE (todo)
 
 
